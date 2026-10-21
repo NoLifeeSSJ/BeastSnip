@@ -5,17 +5,20 @@ import sys
 
 from PySide6.QtCore import (QDir, QEvent, QLockFile, QObject, QSize, Qt, QThreadPool,
     QTimer, QUrl, Signal)
-from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QIcon, QImage, QImageReader, QPixmap
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QIcon, QImage, QImageReader, QKeySequence, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QFileDialog, QHBoxLayout,
     QInputDialog, QLabel, QListView, QListWidget, QListWidgetItem, QMainWindow, QMenu,
-    QMessageBox, QPushButton, QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget, QLineEdit)
+    QMessageBox, QPushButton, QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget, QLineEdit,
+    QButtonGroup, QTabWidget, QToolButton, QWidgetAction, QSizePolicy)
 
 from .capture import RegionSession
 from .config import Settings, data_dir, resource
 from .dialogs import PinnedWindow, SettingsDialog
 from .document import Document, save_image
-from .editor import Editor
+from .editor import Editor, TOOLS
+from .autosave import AutosaveSession, capture_path
+from .ui import CommandPalette, icon, tool_button
 from .ocr import OCRJob, find_tesseract
 from .storage import History
 from .style import STYLE
@@ -79,6 +82,10 @@ class MainWindow(QMainWindow):
         self.ocr_job, self.capture_session = None, None
         self.capture_busy, self.history_busy, self.export_busy, self.quitting = False, False, False, False
         self.ocr_generation = None
+        self.autosave = None
+        self.autosaves = []
+        self._screenshot_loading = False
+        self._refresh_again = False
         self.setWindowTitle(f"BeastSnip {__version__}")
         self.setWindowIcon(QIcon(str(resource("beastsnip.ico"))))
         self.resize(1280, 820)
@@ -86,65 +93,169 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         central = QWidget()
         root = QVBoxLayout(central)
-        root.setContentsMargins(18, 14, 18, 10)
-        nav = QHBoxLayout()
-        title = QLabel("BeastSnip")
-        title.setObjectName("hero")
-        nav.addWidget(title)
-        self.add_button(nav, "Gallery", self.show_gallery)
-        capture = self.add_button(nav, "New Region", lambda: self.capture("region"))
-        capture.setObjectName("primary")
-        self.add_button(nav, "Active Window", lambda: self.capture("window"))
+        root.setContentsMargins(14, 10, 14, 8)
+        root.setSpacing(12)
+        header = QWidget()
+        header.setObjectName('appHeader')
+        nav = QHBoxLayout(header)
+        nav.setContentsMargins(10, 8, 10, 8)
+        nav.setSpacing(8)
+        self.brand = tool_button('library', 'BeastSnip')
+        self.brand.setObjectName('brand')
+        self.brand.setIcon(self.windowIcon())
+        self.brand.setIconSize(QSize(30, 30))
+        self.brand.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        brand_menu = QMenu(self.brand)
+        brand_menu.addAction(icon('library'), 'Screenshot library', self.show_gallery)
+        brand_menu.addAction(icon('folder'), 'Open Screenshots folder', self.open_screenshots_folder)
+        brand_menu.addSeparator()
+        brand_menu.addAction(icon('settings'), 'Preferences', self.open_settings)
+        brand_menu.addAction(icon('help'), 'Keyboard shortcuts', self.show_shortcuts)
+        brand_menu.addAction('About BeastSnip', self.show_about)
+        brand_menu.addSeparator()
+        brand_menu.addAction('Quit BeastSnip', self.quit_app)
+        self.brand.setMenu(brand_menu)
+        nav.addWidget(self.brand)
+        self.workspace_tabs = QButtonGroup(self)
+        self.workspace_tabs.setExclusive(True)
+        self.library_nav = tool_button('library', 'Library', self.show_gallery)
+        self.editor_nav = tool_button('pen', 'Editor', self.resume_editor)
+        for button in (self.library_nav, self.editor_nav):
+            button.setObjectName('workspaceTab')
+            button.setCheckable(True)
+            self.workspace_tabs.addButton(button)
+            nav.addWidget(button)
+        self.library_nav.setChecked(True)
+        self.editor_nav.setEnabled(False)
+        nav.addStretch()
+        self.capture_button = tool_button('capture', 'New Snip', lambda: self.capture('region'))
+        self.capture_button.setObjectName('primary')
+        self.capture_button.setToolTip('Capture a region · ' + self.settings['hotkey'] + '\nUse the arrow for window, monitor and delay options')
+        self.capture_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.capture_button.setProperty('split', True)
+        self.capture_menu = QMenu(self.capture_button)
+        self.capture_menu.addAction(icon('capture'), 'Capture a region', lambda: self.capture('region'))
+        self.capture_menu.addAction(icon('window'), 'Capture active window', lambda: self.capture('window'))
+        self.capture_menu.addAction(icon('monitor'), 'Capture selected monitor', lambda: self.capture('monitor'))
+        self.capture_menu.addSeparator()
+        options = QWidget()
+        option_layout = QVBoxLayout(options)
+        option_layout.setContentsMargins(14, 10, 14, 10)
+        option_layout.addWidget(QLabel('Monitor'))
         self.monitor = QComboBox()
+        self.monitor.setMinimumWidth(240)
         self.refresh_monitors()
-        self.monitor.setToolTip("Choose the monitor to capture")
-        nav.addWidget(self.monitor)
-        self.add_button(nav, "Capture Monitor", lambda: self.capture("monitor"))
+        option_layout.addWidget(self.monitor)
+        option_layout.addWidget(QLabel('Capture delay'))
         self.delay = QComboBox()
         for delay in (0, 3, 5, 10):
-            self.delay.addItem("No delay" if delay == 0 else f"{delay}s delay", delay)
-        self.delay.setCurrentIndex((0, 3, 5, 10).index(self.settings["delay"]))
+            self.delay.addItem('No delay' if delay == 0 else f'{delay} seconds', delay)
+        self.delay.setCurrentIndex((0, 3, 5, 10).index(self.settings['delay']))
         self.delay.currentIndexChanged.connect(self.delay_changed)
-        nav.addWidget(self.delay)
-        nav.addStretch()
-        self.add_button(nav, "Open…", self.open_image)
-        self.add_button(nav, "Settings", self.open_settings)
-        root.addLayout(nav)
+        option_layout.addWidget(self.delay)
+        option_action = QWidgetAction(self.capture_menu)
+        option_action.setDefaultWidget(options)
+        self.capture_menu.addAction(option_action)
+        self.capture_button.setMenu(self.capture_menu)
+        nav.addWidget(self.capture_button)
+        self.command_button = tool_button('search', 'Find action (Ctrl+K)', self.show_commands, icon_only=True)
+        nav.addWidget(self.command_button)
+        nav.addWidget(tool_button('folder', 'Open image (Ctrl+O)', self.open_image, icon_only=True))
+        nav.addWidget(tool_button('settings', 'Preferences', self.open_settings, icon_only=True))
+        root.addWidget(header)
+        self.save_warning = QWidget()
+        self.save_warning.setObjectName('warningBanner')
+        warning_layout = QHBoxLayout(self.save_warning)
+        warning_layout.setContentsMargins(12, 8, 12, 8)
+        self.save_warning_text = QLabel()
+        self.save_warning_text.setWordWrap(True)
+        warning_layout.addWidget(self.save_warning_text, 1)
+        self.add_button(warning_layout, 'Retry save', self.retry_autosaves)
+        self.add_button(warning_layout, 'Preferences', self.open_settings)
+        self.save_warning.hide()
+        root.addWidget(self.save_warning)
         self.stack = QStackedWidget()
         self.home = QWidget()
         home_layout = QVBoxLayout(self.home)
-        heading = QLabel("Your screenshots, kept on your computer")
-        heading.setStyleSheet("font-size:19px; font-weight:600; padding-top:12px")
-        home_layout.addWidget(heading)
+        home_layout.setContentsMargins(4, 0, 4, 0)
+        home_layout.setSpacing(14)
+        welcome = QWidget()
+        welcome.setObjectName('welcomeCard')
+        welcome_row = QHBoxLayout(welcome)
+        welcome_row.setContentsMargins(22, 20, 22, 20)
+        logo = QLabel()
+        logo.setPixmap(self.windowIcon().pixmap(64, 64))
+        welcome_row.addWidget(logo)
+        intro = QVBoxLayout()
+        title = QLabel('A little capture. A clearer picture.')
+        title.setObjectName('welcomeTitle')
+        intro.addWidget(title)
+        self.library_description = QLabel()
+        self.library_description.setObjectName('muted')
+        self.library_description.setWordWrap(True)
+        intro.addWidget(self.library_description)
+        welcome_row.addLayout(intro, 1)
+        self.add_button(welcome_row, 'Paste Image', self.paste_image)
+        home_layout.addWidget(welcome)
+        search_row = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search titles, tags and explicitly saved OCR text…")
-        self.search.textChanged.connect(self.refresh_gallery)
-        home_layout.addWidget(self.search)
-        self.empty = QLabel("Capture a region or open an image to get started.\nHistory is saved only when you choose Save to History, unless enabled in Settings.")
+        self.search.setClearButtonEnabled(True)
+        self.search.setPlaceholderText('Search screenshots, or titles, tags and OCR in Saved History…')
+        self.search.textChanged.connect(self.refresh_library)
+        search_row.addWidget(self.search, 1)
+        search_row.addWidget(tool_button('folder', 'Screenshots folder', self.open_screenshots_folder))
+        search_row.addWidget(tool_button('redo', 'Refresh (F5)', self.refresh_library, icon_only=True))
+        home_layout.addLayout(search_row)
+        self.library_tabs = QTabWidget()
+        screenshot_page = QWidget()
+        screenshot_layout = QVBoxLayout(screenshot_page)
+        self.screenshot_count = QLabel('Your captures will appear here.')
+        self.screenshot_count.setObjectName('muted')
+        screenshot_layout.addWidget(self.screenshot_count)
+        self.screenshots = QListWidget()
+        self.configure_gallery(self.screenshots)
+        self.screenshots.itemDoubleClicked.connect(lambda item: self.open_screenshot())
+        screenshot_layout.addWidget(self.screenshots, 1)
+        screenshot_actions = QHBoxLayout()
+        self.add_button(screenshot_actions, 'Open in Editor', self.open_screenshot)
+        self.add_button(screenshot_actions, 'Copy Image', self.copy_screenshot)
+        self.add_button(screenshot_actions, 'Open Folder', self.open_screenshots_folder)
+        screenshot_actions.addStretch()
+        screenshot_layout.addLayout(screenshot_actions)
+        self.library_tabs.addTab(screenshot_page, 'Screenshots')
+        history_page = QWidget()
+        history_layout = QVBoxLayout(history_page)
+        self.empty = QLabel('Keep selected captures here with Save to History.\nHistory also stores searchable titles, tags and extracted text.')
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty.setWordWrap(True)
-        self.empty.setStyleSheet("font-size:16px; color:#bdb8d1; padding:30px;")
-        home_layout.addWidget(self.empty, 1)
+        self.empty.setObjectName('emptyState')
+        history_layout.addWidget(self.empty)
         self.gallery = QListWidget()
-        self.gallery.setViewMode(QListView.ViewMode.IconMode)
-        self.gallery.setResizeMode(QListView.ResizeMode.Adjust)
-        self.gallery.setMovement(QListView.Movement.Static)
-        self.gallery.setIconSize(QSize(250, 150))
-        self.gallery.setGridSize(QSize(300, 245))
-        self.gallery.setWordWrap(True)
+        self.configure_gallery(self.gallery)
         self.gallery.itemDoubleClicked.connect(lambda item: self.open_history())
-        home_layout.addWidget(self.gallery, 1)
+        history_layout.addWidget(self.gallery, 1)
         gallery_actions = QHBoxLayout()
-        for label, callback in [("Open in Editor", self.open_history), ("Copy Image", self.copy_history),
-                                ("Edit Title / Tags", self.rename_history), ("Open Folder", self.history_folder),
-                                ("Delete", self.delete_history), ("Clear History", self.clear_history)]:
+        for label, callback in [('Open in Editor', self.open_history), ('Copy Image', self.copy_history),
+                                ('Edit Title / Tags', self.rename_history), ('Open Folder', self.history_folder)]:
             self.add_button(gallery_actions, label, callback)
+        history_more = tool_button('more', 'More')
+        history_more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        history_menu = QMenu(history_more)
+        history_menu.addAction('Delete selected history item', self.delete_history)
+        history_menu.addAction('Clear History', self.clear_history)
+        history_more.setMenu(history_menu)
+        gallery_actions.addWidget(history_more)
         gallery_actions.addStretch()
-        home_layout.addLayout(gallery_actions)
+        history_layout.addLayout(gallery_actions)
+        self.library_tabs.addTab(history_page, 'Saved History')
+        self.library_tabs.currentChanged.connect(self.refresh_library)
+        home_layout.addWidget(self.library_tabs, 1)
         self.stack.addWidget(self.home)
         self.editor = Editor()
         self.editor.copy_requested.connect(self.copy_image)
         self.editor.save_requested.connect(self.export_image)
+        self.editor.quicksave_requested.connect(self.quick_save)
+        self.editor.folder_requested.connect(self.open_screenshots_folder)
         self.editor.history_requested.connect(self.save_history)
         self.editor.pin_requested.connect(self.pin_image)
         self.editor.ocr_requested.connect(self.extract_text)
@@ -169,7 +280,15 @@ class MainWindow(QMainWindow):
         self.capture_timer = QTimer(self)
         self.capture_timer.setSingleShot(True)
         self.capture_timer.timeout.connect(self.perform_capture)
-        self.refresh_gallery()
+        self.refresh_library()
+        self.update_autosave_ui()
+        self.stack.currentChanged.connect(self.workspace_changed)
+        for sequence, callback in [("Ctrl+K", self.show_commands), ("Ctrl+O", self.open_image),
+                                   ("Ctrl+V", self.paste_image), ("F1", self.show_shortcuts), ("F5", self.refresh_library)]:
+            action = QAction(self)
+            action.setShortcut(QKeySequence(sequence))
+            action.triggered.connect(callback)
+            self.addAction(action)
         QApplication.instance().screenAdded.connect(lambda screen: self.refresh_monitors())
         QApplication.instance().screenRemoved.connect(lambda screen: self.refresh_monitors())
         if self.hotkey_warning:
@@ -193,7 +312,8 @@ class MainWindow(QMainWindow):
         self.tasks.append(task)
         def completed(result, error):
             self.tasks.remove(task)
-            callback(result, error)
+            if not self.quitting:
+                callback(result, error)
         task.signals.finished.connect(completed, Qt.ConnectionType.QueuedConnection)
         QThreadPool.globalInstance().start(task)
 
@@ -234,6 +354,8 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def confirm_discard(self):
+        if not self.finish_autosaves():
+            return False
         if self.export_busy or self.history_busy:
             self.statusBar().showMessage("Please wait for the current save to finish.")
             return False
@@ -242,28 +364,262 @@ class MainWindow(QMainWindow):
             return result == QMessageBox.StandardButton.Discard
         return True
 
+    @staticmethod
+    def configure_gallery(gallery):
+        gallery.setViewMode(QListView.ViewMode.IconMode)
+        gallery.setResizeMode(QListView.ResizeMode.Adjust)
+        gallery.setMovement(QListView.Movement.Static)
+        gallery.setIconSize(QSize(230, 140))
+        gallery.setGridSize(QSize(270, 210))
+        gallery.setWordWrap(True)
+        gallery.setSpacing(8)
+
+    def workspace_changed(self):
+        self.library_nav.setChecked(self.stack.currentWidget() is self.home)
+        self.editor_nav.setChecked(self.stack.currentWidget() is self.editor)
+
+    def resume_editor(self):
+        if self.doc:
+            self.stack.setCurrentWidget(self.editor)
+            self.editor.canvas.setFocus()
+
     def show_gallery(self):
-        self.refresh_gallery()
+        self.refresh_library()
         self.stack.setCurrentWidget(self.home)
         self.bring_forward()
-        if self.doc:
-            self.statusBar().showMessage("Current editing session is kept in memory. Use Open in Editor or capture to replace it.")
-            # Give users a visible path back to their retained editing session.
-            if not hasattr(self, "resume_action"):
-                self.resume_action = QPushButton("Resume Editor")
-                self.resume_action.clicked.connect(lambda: self.stack.setCurrentWidget(self.editor))
-                self.home.layout().insertWidget(1, self.resume_action)
-            self.resume_action.show()
 
     def set_document(self, image, history_id=None):
+        if self.autosave:
+            previous = self.autosave
+            self.autosave = None
+            previous.retire()
         doc = Document(image)
         doc.history_id = history_id
         if history_id is None:
-            doc.saved_revision = -1  # New capture/import must be explicitly kept.
+            doc.saved_revision = -1
         self.doc = doc
         self.editor.set_document(doc)
+        self.editor_nav.setEnabled(True)
         self.stack.setCurrentWidget(self.editor)
+        self.editor_nav.setChecked(True)
+        self.autosave_changed()
+        self.update_autosave_ui()
         self.bring_forward()
+
+    def start_autosave(self, path=None):
+        if not self.doc:
+            return
+        self.autosave = AutosaveSession(self.doc, path or capture_path(self.settings['screenshots_dir']), self.task, self)
+        self.autosaves.append(self.autosave)
+        self.autosave.state_changed.connect(self.autosave_changed)
+        self.autosave.flush()
+
+    def autosave_changed(self):
+        for session in self.autosaves[:]:
+            if session.retired and not session.busy and (not session.pending or session.error):
+                self.autosaves.remove(session)
+                session.deleteLater()
+        self.update_autosave_ui()
+        if self.stack.currentWidget() is self.home:
+            self.refresh_screenshots()
+
+    def update_autosave_ui(self):
+        self.editor.update_state()
+        session = self.autosave
+        failures = [item for item in self.autosaves if item.error]
+        self.save_warning.setVisible(bool(failures))
+        if failures:
+            self.save_warning_text.setText('Could not autosave. Your capture is still open. Retry, use Save As, or choose a writable Screenshots folder in Preferences.\n' + failures[-1].error)
+        if session:
+            text = 'Save failed · Retry with Save' if session.error else 'Saving capture…' if session.busy or session.pending else 'Saved to Screenshots'
+            self.editor.save_status.setText(text)
+            self.editor.save_status.setToolTip(str(session.path))
+            self.editor.save_status.setIcon(icon('help' if session.error else 'save' if session.busy or session.pending else 'check', '#f7b47c' if session.error else '#a5d7bd'))
+        else:
+            self.editor.save_status.setText('Auto-save on for new snips' if self.settings['auto_save'] else 'Auto-save off · Save to keep')
+            self.editor.save_status.setToolTip(self.settings['screenshots_dir'])
+            self.editor.save_status.setIcon(icon('folder'))
+        self.library_description.setText('New snips save automatically. Edit, copy or find them here.' if self.settings['auto_save'] else 'Capture, annotate and keep everything on your computer. Auto-save is off.')
+        self.capture_button.setToolTip('New region · ' + self.settings['hotkey'] + '\nArrow: window, monitor and delay options')
+
+    def retry_autosaves(self):
+        for session in self.autosaves[:]:
+            if session.error:
+                # The user may have selected a new writable directory after a failure.
+                if session.written_revision is None:
+                    session.path = Path(self.settings['screenshots_dir']) / session.path.name
+                session.flush()
+
+    def finish_autosaves(self):
+        for session in self.autosaves[:]:
+            if session.pending and not session.error:
+                session.flush()
+        if any(item.busy or (item.pending and not item.error) for item in self.autosaves):
+            self.statusBar().showMessage('Finishing the automatic save. Try again in a moment.', 5000)
+            return False
+        return True
+
+    def quick_save(self):
+        if self.autosave:
+            if self.autosave.error and self.autosave.written_revision is None:
+                self.autosave.path = Path(self.settings['screenshots_dir']) / self.autosave.path.name
+            self.autosave.flush()
+        else:
+            self.start_autosave()
+        self.update_autosave_ui()
+
+    def paste_image(self):
+        image = QApplication.clipboard().image()
+        if image.isNull():
+            self.statusBar().showMessage('Copy an image to the clipboard first, then paste it here.', 7000)
+            return
+        if self.confirm_discard():
+            self.set_document(image)
+            if self.settings['auto_save']:
+                self.start_autosave()
+
+    def open_screenshots_folder(self):
+        try:
+            directory = Path(self.settings['screenshots_dir'])
+            directory.mkdir(parents=True, exist_ok=True)
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory.resolve()))):
+                raise OSError('The Screenshots folder could not be opened.')
+        except Exception as error:
+            self.error(error)
+
+    def refresh_library(self, *args):
+        self.refresh_gallery()
+        self.refresh_screenshots()
+
+    def refresh_screenshots(self):
+        if self.quitting:
+            return
+        if not Path(self.settings['screenshots_dir']).exists():
+            self.screenshots.clear()
+            self.screenshot_count.setText('Your next snip will appear here. Use New Snip or paste an image.')
+            return
+        if self._screenshot_loading:
+            self._refresh_again = True
+            return
+        self._screenshot_loading = True
+        directory, term = Path(self.settings['screenshots_dir']), self.search.text().casefold()
+        def load():
+            if not directory.exists():
+                return [], 0
+            paths = sorted((p for p in directory.glob('*.png') if term in p.name.casefold()), key=lambda p: p.stat().st_mtime, reverse=True)
+            rows = []
+            for path in paths[:120]:
+                reader = QImageReader(str(path))
+                size = reader.size()
+                if not size.isValid():
+                    continue
+                reader.setScaledSize(size.scaled(230, 140, Qt.AspectRatioMode.KeepAspectRatio))
+                thumb = reader.read()
+                if not thumb.isNull():
+                    label = datetime.fromtimestamp(path.stat().st_mtime).strftime("Snip · %d %b · %H:%M:%S") if path.stem.startswith("BeastSnip_") else path.stem
+                    rows.append((str(path), size.width(), size.height(), thumb, label))
+            return rows, len(paths)
+        def completed(result, error):
+            self._screenshot_loading = False
+            if directory != Path(self.settings['screenshots_dir']) or term != self.search.text().casefold():
+                self._refresh_again = True
+            elif error:
+                self.screenshot_count.setText('Could not read Screenshots: ' + error)
+            else:
+                rows, total = result
+                selected = self.screenshots.currentItem()
+                previous = selected.data(Qt.ItemDataRole.UserRole) if selected else None
+                self.screenshots.clear()
+                for path, width, height, thumb, label in rows:
+                    item = QListWidgetItem(QIcon(QPixmap.fromImage(thumb)), f'{label}\n{width} × {height} px')
+                    item.setData(Qt.ItemDataRole.UserRole, path)
+                    item.setToolTip(path)
+                    self.screenshots.addItem(item)
+                    if path == previous:
+                        self.screenshots.setCurrentItem(item)
+                self.screenshot_count.setText((f'{total} screenshot' + ('s' if total != 1 else '') + (' · Showing the newest 120' if total > 120 else '')) if total else 'No matches.' if term else 'Your next snip will appear here. Use New Snip or paste an image.')
+                self.screenshot_count.setToolTip(str(directory))
+            if self._refresh_again:
+                self._refresh_again = False
+                self.refresh_screenshots()
+        self.task(load, completed)
+
+    def selected_screenshot(self):
+        item = self.screenshots.currentItem()
+        if not item:
+            self.statusBar().showMessage('Select a screenshot first.', 5000)
+            return None
+        return item.data(Qt.ItemDataRole.UserRole)
+
+    def open_screenshot(self):
+        path = self.selected_screenshot()
+        if path:
+            self.open_image(path)
+
+    def copy_screenshot(self):
+        path = self.selected_screenshot()
+        if path:
+            image = QImage(path)
+            if image.isNull():
+                self.error('This screenshot is missing or could not be read. Refresh the library.')
+            else:
+                self.copy_to_clipboard(image)
+
+    def show_commands(self):
+        has_doc = lambda: self.doc is not None
+        always = lambda: True
+        commands = [
+            ('Capture a region · New Snip', lambda: self.capture('region'), always),
+            ('Capture active window', lambda: self.capture('window'), always),
+            ('Capture selected monitor', lambda: self.capture('monitor'), always),
+            ('Open an image · Ctrl+O', self.open_image, always),
+            ('Paste image from clipboard · Ctrl+V', self.paste_image, always),
+            ('Open screenshot library', self.show_gallery, always),
+            ('Resume editor', self.resume_editor, has_doc),
+            ('Open Screenshots folder', self.open_screenshots_folder, always),
+            ('Preferences · Settings · Auto-save folder', self.open_settings, always),
+            ('Keyboard shortcuts · Help', self.show_shortcuts, always),
+            ('Save capture · Ctrl+S', self.quick_save, has_doc),
+            ('Save As · Export PNG or JPEG', self.export_image, has_doc),
+            ('Save to History', self.save_history, has_doc),
+            ('Copy flattened image', self.copy_image, has_doc),
+            ('Pin on Screen', self.pin_image, has_doc),
+            ('Extract text · OCR whole image', self.extract_text, has_doc),
+            ('Select OCR area', lambda: self.choose_tool('ocr'), has_doc),
+            ('Show extracted text panel', self.show_ocr_panel, has_doc),
+            ('Focus workspace', self.focus_workspace, has_doc),
+        ]
+        commands.extend((f'Tool: {label} · {key}', lambda t=tool: self.choose_tool(t), has_doc) for tool, label, key, tip in TOOLS)
+        dialog = CommandPalette(commands, self)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
+
+    def choose_tool(self, tool):
+        self.resume_editor()
+        self.editor.canvas.set_tool(tool)
+
+    def show_ocr_panel(self):
+        self.resume_editor()
+        if self.doc:
+            self.editor.show_ocr(self.doc.ocr_text)
+
+    def focus_workspace(self):
+        self.resume_editor()
+        self.editor.toggle_focus()
+
+    def show_shortcuts(self):
+        QMessageBox.information(self, 'BeastSnip · Keyboard shortcuts',
+            'CAPTURE\n' + self.settings['hotkey'] + '  New region (global)\n\n'
+            'WORKSPACE\nCtrl+K  Find any action\nCtrl+O  Open image\nCtrl+V  Paste image\n'
+            'Ctrl+S  Save to Screenshots\nCtrl+Shift+S  Save As…\nCtrl+C  Copy image (or selected OCR text)\n'
+            'Ctrl+Z / Ctrl+Y  Undo / Redo\nCtrl+Shift+F  Focus workspace\nF5  Refresh library\n\n'
+            'TOOLS\nV Select · H Pan · P Pen · I Highlight · A Arrow\nB Box · F Fill · O Ellipse · T Text · N Step\n'
+            'R Redact · C Crop · Esc Select\n\nCtrl+wheel to zoom · Middle mouse to pan\nDouble-click a text annotation to edit it.')
+
+    def show_about(self):
+        QMessageBox.about(self, 'About BeastSnip', f'BeastSnip {__version__}\nCapture. Clarify. Keep.\n\nNative Windows screenshots, annotations and offline OCR.\nYour images stay on your computer.\n\nNew captures: ' + self.settings['screenshots_dir'])
 
     def capture(self, mode):
         if QApplication.activeModalWidget() is not None:
@@ -335,7 +691,9 @@ class MainWindow(QMainWindow):
             self.capture_session = None
         self.restore_pins()
         self.set_document(image)
-        self.statusBar().showMessage("Captured · Edit in memory, then save or copy a flattened image.")
+        self.statusBar().showMessage("Captured · Choose a tool on the left, or press Ctrl+K to find an action.")
+        if self.settings["auto_save"]:
+            self.start_autosave()
         if self.settings["auto_copy"]:
             self.copy_image()
         if self.settings["auto_history"]:
@@ -355,6 +713,8 @@ class MainWindow(QMainWindow):
             if image.isNull():
                 raise ValueError("The image could not be opened. " + reader.errorString())
             self.set_document(image)
+            if self.settings["auto_save"] and Path(path).suffix.lower() == ".png" and Path(path).resolve().parent == Path(self.settings["screenshots_dir"]).resolve():
+                self.start_autosave(path)
         except Exception as error:
             self.error(error)
 
@@ -396,6 +756,11 @@ class MainWindow(QMainWindow):
             path += ".jpg" if selected.startswith("JPEG") else ".png"
             if Path(path).exists() and QMessageBox.question(self, "Replace image?", f"Replace the existing file {path}?") != QMessageBox.StandardButton.Yes:
                 return
+        if self.autosave and Path(path).resolve() == self.autosave.path.resolve():
+            # Keep writes to this PNG in the same serial queue as automatic edits.
+            self.autosave.pending = True
+            self.autosave.flush()
+            return
         doc, revision, image = self.doc, self.doc.revision, self.doc.flatten()
         quality = self.settings["jpeg_quality"]
         self.export_busy = True
@@ -559,12 +924,12 @@ class MainWindow(QMainWindow):
                 elif not QDesktopServices.openUrl(QUrl.fromLocalFile(directory)):
                     self.error("The containing folder could not be opened.")
                 else:
-                    self.statusBar().showMessage("Opened history folder. The PNG is a flattened convenience copy; the gallery uses SQLite.")
+                    self.statusBar().showMessage("Opened the folder for this saved image.")
             self.task(materialize, completed)
 
     def delete_history(self):
         item_id = self.selected_history()
-        if item_id and QMessageBox.question(self, "Delete screenshot", "Remove this flattened image, thumbnail, title, tags and OCR from history? Separately exported files and clipboard copies remain.") == QMessageBox.StandardButton.Yes:
+        if item_id and QMessageBox.question(self, "Delete screenshot", "Remove this image, title, tags and OCR from Saved History? Screenshots folder files, separate exports and clipboard copies remain.") == QMessageBox.StandardButton.Yes:
             try:
                 self.history.delete(item_id)
                 if self.doc and self.doc.history_id == item_id:
@@ -577,7 +942,7 @@ class MainWindow(QMainWindow):
     def clear_history(self):
         if self.history_busy:
             return
-        if QMessageBox.question(self, "Clear history", "Permanently remove all gallery images, thumbnails, titles, tags and saved OCR? Separately exported files and clipboard copies remain.") == QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, "Clear history", "Permanently remove all images, titles, tags and OCR from Saved History? Screenshots folder files, separate exports and clipboard copies remain.") == QMessageBox.StandardButton.Yes:
             try:
                 self.history.clear()
                 if self.doc and self.doc.history_id:
@@ -607,8 +972,9 @@ class MainWindow(QMainWindow):
             if old["history_dir"] != values["history_dir"] and self.doc:
                 self.doc.history_id = None
             warning = self.integration.register(values["hotkey"])
-            self.refresh_gallery()
-            self.statusBar().showMessage(warning or "Settings saved.", 15000)
+            self.refresh_library()
+            self.update_autosave_ui()
+            self.statusBar().showMessage(warning or "Settings saved. New captures use these preferences.", 15000)
             if warning:
                 self.error(warning)
         except Exception as error:
@@ -638,6 +1004,8 @@ class MainWindow(QMainWindow):
     def quit_app(self):
         if self.smoke:
             self.shutdown()
+            return
+        if not self.finish_autosaves():
             return
         if self.ocr_job or self.tasks:
             self.statusBar().showMessage("Please wait for background saving or OCR to finish before quitting (OCR timeout: 90 seconds).")

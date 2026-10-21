@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.0 — 21 October 2026
+
+- Redesigned the native workspace around a compact header, a grouped icon tool rail, contextual editing controls, and focused copy/save actions. All twelve annotation/navigation tools remain available.
+- Integrated the BeastSnip icon and wordmark into an app navigation menu, with Library / Editor navigation that keeps the current session intact.
+- Grouped region, active-window, monitor and delayed capture in the New Snip split button. Tray capture and the global shortcut are retained.
+- Added automatic PNG saving for new captures and pasted images in `C:\SnipsV1\Screenshots`. The existing installation remains at `C:\SnipV1`.
+- Edits, crops, redactions, undo and redo update the same PNG with debounced, atomic, serial background writes. Older writes cannot finish after a newer edit and replace it. Save completion does not interrupt drawing.
+- Added a persistent save status, failure banner and retry action. Failed saves keep the session unsaved. PNG auto-save does not store OCR text; Saved History still stores text explicitly.
+- Added a Screenshots library with background thumbnail loading, filename search, open/copy actions, folder access and refresh, alongside the existing searchable Saved History.
+- Added paste from clipboard, quick save, an action search (Ctrl+K), tool shortcuts, a keyboard guide (F1), and Focus mode (Ctrl+Shift+F).
+- Grouped Preferences into Captures & storage, Workspace, and Offline OCR. Added auto-save controls and folder selection; preserved existing settings, languages, history, and the working OCR engine.
+- Kept the resizable OCR sidebar, expanded reader, text size and wrapping controls. The helper text adapts to short windows.
+- Added a one-time, backed-up settings migration with a real folder write check. Later custom folder choices and an explicit auto-save-off preference survive subsequent updates.
+- Shipped a self-contained 2.0.0 PowerShell updater, matching source ZIP, checksums, tests, and reproducible UI previews.
+
 ## 1.0.3 — 21 October 2026
 
 - OCR results open in a full-height sidebar instead of a shallow box below the image.

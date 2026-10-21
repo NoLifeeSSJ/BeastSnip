@@ -2,14 +2,15 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QLineF, QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QKeySequence, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QColorDialog, QComboBox, QGraphicsItem,
-    QGraphicsObject, QGraphicsScene, QGraphicsView, QHBoxLayout, QInputDialog, QLabel,
-    QPushButton, QScrollArea, QSpinBox, QSplitter, QTextEdit, QVBoxLayout, QWidget)
+    QGraphicsObject, QGraphicsScene, QGraphicsView, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QMenu,
+    QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter, QToolButton, QVBoxLayout, QWidget)
 
 from .document import Annotation
 from .ocr_panel import OCRPanel
+from .ui import icon, tool_button
 
 
 class AnnotationItem(QGraphicsObject):
@@ -57,6 +58,7 @@ class AnnotationItem(QGraphicsObject):
 class Canvas(QGraphicsView):
     area_selected = Signal(object)
     zoom_changed = Signal(int)
+    tool_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -98,6 +100,7 @@ class Canvas(QGraphicsView):
     def set_tool(self, tool):
         self.cancel()
         self.tool = tool
+        self.tool_changed.emit(tool)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag if tool == "pan" else QGraphicsView.DragMode.NoDrag)
         self.setCursor(Qt.CursorShape.OpenHandCursor if tool == "pan" else Qt.CursorShape.ArrowCursor if tool == "select" else Qt.CursorShape.CrossCursor)
         for item in self.scene().items():
@@ -233,78 +236,119 @@ class Canvas(QGraphicsView):
         super().mouseReleaseEvent(event)
 
 
+TOOLS = [
+    ("select", "Select", "V", "Select and move annotations; double-click a text label to edit"),
+    ("pan", "Pan", "H", "Drag to pan; the middle mouse button also pans"),
+    ("pen", "Pen", "P", "Draw freehand on the image"),
+    ("highlight", "Highlight", "I", "Mark an area with translucent colour"),
+    ("arrow", "Arrow", "A", "Drag from the tail to the tip of an arrow"),
+    ("rect", "Box", "B", "Draw an outlined rectangle"),
+    ("filled", "Fill", "F", "Draw a filled rectangle"),
+    ("ellipse", "Ellipse", "O", "Draw an outlined ellipse"),
+    ("text", "Text", "T", "Click the image to add an editable text label"),
+    ("number", "Step", "N", "Click to place the next numbered marker"),
+    ("redact", "Redact", "R", "Draw an opaque black block over sensitive information"),
+    ("crop", "Crop", "C", "Drag to crop; undo restores the image and editable objects"),
+]
+
+
 class Editor(QWidget):
     copy_requested = Signal()
     save_requested = Signal()
+    quicksave_requested = Signal()
+    folder_requested = Signal()
     history_requested = Signal()
     pin_requested = Signal()
     ocr_requested = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        self.canvas = Canvas()
         self.tools = QButtonGroup(self)
         self.tools.setExclusive(True)
-        bar = QWidget()
-        row = QHBoxLayout(bar)
-        row.setContentsMargins(4, 4, 4, 4)
-        self.canvas = Canvas()
-        for tool, label, tip in [
-            ("select", "Select", "Select, move or delete annotations; double-click a text label to edit"),
-            ("pan", "Pan", "Drag the image; middle mouse also pans"), ("pen", "Pen", "Freehand pen"),
-            ("highlight", "Highlight", "Translucent highlighter"), ("arrow", "Arrow", "Draw an arrow"),
-            ("rect", "Box", "Outlined rectangle"), ("filled", "Fill", "Filled rectangle"),
-            ("ellipse", "Ellipse", "Outlined ellipse"), ("text", "Text", "Add a text label"),
-            ("number", "Step", "Automatically numbered marker"), ("redact", "Redact", "Opaque black block; flatten on copy or export"),
-            ("crop", "Crop", "Drag to crop; crop flattens objects, undo restores them"),
-        ]:
-            button = QPushButton(label)
-            button.setCheckable(True)
-            button.setToolTip(tip)
-            button.clicked.connect(lambda checked=False, t=tool: self.canvas.set_tool(t))
-            self.tools.addButton(button)
-            if tool == "select":
-                button.setChecked(True)
-                self.select_button = button
-            row.addWidget(button)
-        row.addStretch()
-        scroll = QScrollArea()
-        scroll.setWidget(bar)
-        scroll.setWidgetResizable(True)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setMaximumHeight(76)
-        layout.addWidget(scroll)
-        controls = QHBoxLayout()
-        colour = QPushButton("Colour")
-        colour.clicked.connect(self.choose_colour)
-        controls.addWidget(colour)
-        controls.addWidget(QLabel("Stroke"))
-        width = QSpinBox()
-        width.setRange(1, 40)
-        width.setValue(4)
-        width.valueChanged.connect(lambda n: self.change_size("stroke_width", "width", n))
-        controls.addWidget(width)
-        controls.addWidget(QLabel("Text px"))
-        size = QSpinBox()
-        size.setRange(8, 160)
-        size.setValue(24)
-        size.valueChanged.connect(lambda n: self.change_size("font_size", "font_size", n))
-        controls.addWidget(size)
-        self.undo_button = self.button(controls, "Undo", lambda: self.canvas.doc.undo() if self.canvas.doc else None)
-        self.redo_button = self.button(controls, "Redo", lambda: self.canvas.doc.redo() if self.canvas.doc else None)
-        self.button(controls, "Delete", self.canvas.delete_selected)
-        controls.addStretch()
-        self.button(controls, "−", lambda: self.canvas.zoom(1 / 1.2))
-        self.zoom_label = QLabel("100%")
-        controls.addWidget(self.zoom_label)
-        self.canvas.zoom_changed.connect(lambda n: self.zoom_label.setText(f"{n}%"))
-        self.button(controls, "+", lambda: self.canvas.zoom(1.2))
-        self.button(controls, "Fit", self.canvas.fit_image)
-        self.button(controls, "1:1", self.canvas.actual_size)
-        layout.addLayout(controls)
+        self.tool_buttons = {}
+        self.focus_mode = False
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        workspace = QHBoxLayout()
+        workspace.setSpacing(12)
+        self.rail = QWidget()
+        self.rail.setObjectName('toolRail')
+        self.rail.setFixedWidth(116)
+        rail_layout = QVBoxLayout(self.rail)
+        rail_layout.setContentsMargins(8, 12, 8, 12)
+        rail_layout.setSpacing(6)
+        for title, group in [('NAVIGATE', TOOLS[:2]), ('ANNOTATE', TOOLS[2:10]), ('FINISH', TOOLS[10:])]:
+            heading = QLabel(title)
+            heading.setObjectName('railHeading')
+            rail_layout.addWidget(heading)
+            grid = QGridLayout()
+            grid.setSpacing(4)
+            for index, (tool, label, key, tip) in enumerate(group):
+                button = tool_button(tool, label, lambda checked=False, t=tool: self.canvas.set_tool(t))
+                button.setObjectName('annotationTool')
+                button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+                button.setIconSize(QSize(20, 20))
+                button.setMinimumSize(46, 45)
+                button.setCheckable(True)
+                button.setToolTip(f'{label} ({key}) · {tip}')
+                self.tools.addButton(button)
+                self.tool_buttons[tool] = button
+                grid.addWidget(button, index // 2, index % 2)
+            rail_layout.addLayout(grid)
+        rail_layout.addStretch()
+        rail_scroll = QScrollArea()
+        rail_scroll.setWidget(self.rail)
+        rail_scroll.setWidgetResizable(True)
+        rail_scroll.setFixedWidth(118)
+        rail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.rail_scroll = rail_scroll
+        workspace.addWidget(rail_scroll)
+        self.select_button = self.tool_buttons['select']
+        self.select_button.setChecked(True)
+        center = QVBoxLayout()
+        center.setSpacing(10)
+        self.context = QWidget()
+        self.context.setObjectName('contextBar')
+        controls = QHBoxLayout(self.context)
+        controls.setContentsMargins(10, 6, 10, 6)
+        controls.setSpacing(8)
+        self.tool_name = QLabel('Select')
+        self.tool_name.setObjectName('toolName')
+        controls.addWidget(self.tool_name)
+        self.colour_button = tool_button('pen', 'Colour', self.choose_colour)
+        controls.addWidget(self.colour_button)
+        self.width_label = QLabel('Stroke')
+        controls.addWidget(self.width_label)
+        self.width_control = QSpinBox()
+        self.width_control.setRange(1, 40)
+        self.width_control.setValue(4)
+        self.width_control.setSuffix(' px')
+        self.width_control.setFixedWidth(82)
+        self.width_control.valueChanged.connect(lambda n: self.change_size('stroke_width', 'width', n))
+        controls.addWidget(self.width_control)
+        self.size_label = QLabel('Text')
+        controls.addWidget(self.size_label)
+        self.size_control = QSpinBox()
+        self.size_control.setRange(8, 160)
+        self.size_control.setValue(24)
+        self.size_control.setSuffix(' px')
+        self.size_control.setFixedWidth(86)
+        self.size_control.valueChanged.connect(lambda n: self.change_size('font_size', 'font_size', n))
+        controls.addWidget(self.size_control)
+        self.tool_hint = QLabel()
+        self.tool_hint.setObjectName('muted')
+        self.tool_hint.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        controls.addWidget(self.tool_hint, 1)
+        self.undo_button = tool_button('undo', 'Undo (Ctrl+Z)', lambda: self.canvas.doc.undo() if self.canvas.doc else None, icon_only=True)
+        self.redo_button = tool_button('redo', 'Redo (Ctrl+Y)', lambda: self.canvas.doc.redo() if self.canvas.doc else None, icon_only=True)
+        self.delete_button = tool_button('trash', 'Delete selected annotation', self.canvas.delete_selected, icon_only=True)
+        for button in (self.undo_button, self.redo_button, self.delete_button):
+            controls.addWidget(button)
+        center.addWidget(self.context)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter.setObjectName("editorSplitter")
+        self.splitter.setObjectName('editorSplitter')
         self.splitter.setHandleWidth(9)
         self.splitter.setChildrenCollapsible(False)
         self.canvas.setMinimumSize(240, 180)
@@ -318,31 +362,125 @@ class Editor(QWidget):
         self._ocr_width = None
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 0)
-        layout.addWidget(self.splitter, 1)
-        bottom = QHBoxLayout()
-        self.button(bottom, "Copy Image", self.copy_requested.emit)
-        self.button(bottom, "Save As…", self.save_requested.emit)
-        self.button(bottom, "Save to History", self.history_requested.emit)
-        self.ocr_button = self.button(bottom, "Extract Text", lambda: self.ocr_requested.emit(None))
-        self.ocr_area_button = self.button(bottom, "OCR Area", lambda: self.canvas.set_tool("ocr"))
-        self.button(bottom, "Pin on Screen", self.pin_requested.emit)
-        bottom.addStretch()
+        center.addWidget(self.splitter, 1)
+        view_bar = QHBoxLayout()
         self.dimensions = QLabel()
-        bottom.addWidget(self.dimensions)
+        self.dimensions.setObjectName('muted')
+        self.dimensions.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        view_bar.addWidget(self.dimensions, 1)
+        self.focus_button = tool_button('focus', 'Focus (Ctrl+Shift+F)', self.toggle_focus, icon_only=True)
+        self.focus_button.setCheckable(True)
+        view_bar.addWidget(self.focus_button)
+        self.button(view_bar, '−', lambda: self.canvas.zoom(1 / 1.2))
+        self.zoom_label = QLabel('100%')
+        self.zoom_label.setMinimumWidth(42)
+        self.zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        view_bar.addWidget(self.zoom_label)
+        self.canvas.zoom_changed.connect(lambda n: self.zoom_label.setText(f'{n}%'))
+        self.button(view_bar, '+', lambda: self.canvas.zoom(1.2))
+        self.button(view_bar, 'Fit', self.canvas.fit_image)
+        self.button(view_bar, '1:1', self.canvas.actual_size)
+        center.addLayout(view_bar)
+        workspace.addLayout(center, 1)
+        layout.addLayout(workspace, 1)
+        bottom = QHBoxLayout()
+        bottom.setSpacing(8)
+        self.save_status = tool_button('folder', 'Ready to save', self.folder_requested.emit)
+        self.save_status.setObjectName('saveStatus')
+        self.save_status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        bottom.addWidget(self.save_status, 1)
+        self.ocr_button = tool_button('ocr', 'Extract Text', lambda: self.ocr_requested.emit(None))
+        self.ocr_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.ocr_button.setProperty('split', True)
+        ocr_menu = QMenu(self)
+        self.ocr_area_button = ocr_menu.addAction(icon('capture'), 'Select OCR area', lambda: self.canvas.set_tool('ocr'))
+        ocr_menu.addAction('Show extracted text', lambda: self.show_ocr(self.canvas.doc.ocr_text) if self.canvas.doc else None)
+        self.ocr_button.setMenu(ocr_menu)
+        bottom.addWidget(self.ocr_button)
+        more = tool_button('more', 'More')
+        more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu = QMenu(more)
+        menu.addAction(icon('save'), 'Save As… (Ctrl+Shift+S)', self.save_requested.emit)
+        menu.addAction(icon('library'), 'Save to History', self.history_requested.emit)
+        menu.addAction(icon('pin'), 'Pin on Screen', self.pin_requested.emit)
+        menu.addSeparator()
+        menu.addAction('Select OCR area', lambda: self.canvas.set_tool('ocr'))
+        menu.addAction('Show / hide extracted text', self.toggle_ocr)
+        menu.addAction('Focus workspace', self.toggle_focus)
+        more.setMenu(menu)
+        self.more_button = more
+        bottom.addWidget(more)
+        self.save_button = tool_button('save', 'Save', self.quicksave_requested.emit)
+        bottom.addWidget(self.save_button)
+        copy = tool_button('copy', 'Copy Image', self.copy_requested.emit)
+        copy.setObjectName('primary')
+        bottom.addWidget(copy)
         layout.addLayout(bottom)
         self.canvas.area_selected.connect(self.ocr_requested.emit)
-        for sequence, callback in [
-            ("Ctrl+C", self.copy_requested.emit), ("Ctrl+S", self.save_requested.emit),
-            ("Ctrl+Z", lambda: self.canvas.doc.undo() if self.canvas.doc else None),
-            ("Ctrl+Y", lambda: self.canvas.doc.redo() if self.canvas.doc else None),
-            ("Ctrl+Shift+Z", lambda: self.canvas.doc.redo() if self.canvas.doc else None),
-            ("Delete", self.canvas.delete_selected), ("Escape", self.escape),
-        ]:
+        self.canvas.tool_changed.connect(self.tool_changed)
+        self.canvas.scene().selectionChanged.connect(self.update_properties)
+        shortcuts = [
+            ('Ctrl+C', self.copy_requested.emit), ('Ctrl+S', self.quicksave_requested.emit),
+            ('Ctrl+Shift+S', self.save_requested.emit),
+            ('Ctrl+Z', lambda: self.canvas.doc.undo() if self.canvas.doc else None),
+            ('Ctrl+Y', lambda: self.canvas.doc.redo() if self.canvas.doc else None),
+            ('Ctrl+Shift+Z', lambda: self.canvas.doc.redo() if self.canvas.doc else None),
+            ('Ctrl+Shift+F', self.toggle_focus),
+            ('Delete', self.canvas.delete_selected), ('Escape', self.escape),
+        ]
+        shortcuts.extend((key, lambda checked=False, t=tool: self.canvas.set_tool(t)) for tool, label, key, tip in TOOLS)
+        for sequence, callback in shortcuts:
             action = QAction(self)
             action.setShortcut(QKeySequence(sequence))
             action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             action.triggered.connect(callback)
             self.addAction(action)
+        self.tool_changed('select')
+
+    def tool_changed(self, tool):
+        if tool in self.tool_buttons:
+            self.tool_buttons[tool].setChecked(True)
+        else:
+            self.tools.setExclusive(False)
+            for button in self.tool_buttons.values():
+                button.setChecked(False)
+            self.tools.setExclusive(True)
+        self.update_properties()
+
+    def update_properties(self):
+        tool = self.canvas.tool
+        index = self.canvas.selected_index()
+        selected = self.canvas.doc.annotations[index] if self.canvas.doc and index is not None and index < len(self.canvas.doc.annotations) else None
+        kind = selected.kind if tool == 'select' and selected else tool
+        names = {entry[0]: entry[1] for entry in TOOLS}
+        hints = {entry[0]: entry[3] for entry in TOOLS}
+        self.tool_name.setText(names.get(kind, 'OCR area'))
+        self.tool_hint.setText(hints.get(kind, 'Drag around the text you want to extract'))
+        self.tool_hint.setToolTip(self.tool_hint.text())
+        self.colour_button.setVisible(kind in ('pen', 'highlight', 'arrow', 'rect', 'filled', 'ellipse', 'text', 'number'))
+        for widget in (self.width_label, self.width_control):
+            widget.setVisible(kind in ('pen', 'highlight', 'arrow', 'rect', 'ellipse'))
+        for widget in (self.size_label, self.size_control):
+            widget.setVisible(kind == 'text')
+        self.delete_button.setEnabled(selected is not None)
+        for widget, value in [(self.width_control, selected.width if selected else self.canvas.stroke_width),
+                              (self.size_control, selected.font_size if selected else self.canvas.font_size)]:
+            widget.blockSignals(True)
+            widget.setValue(value)
+            widget.blockSignals(False)
+        self.colour_button.setIcon(icon('pen', selected.color if selected else self.canvas.color))
+
+    def toggle_focus(self):
+        self.focus_mode = not self.focus_mode
+        self.rail_scroll.setVisible(not self.focus_mode)
+        self.context.setVisible(not self.focus_mode)
+        self.focus_button.setChecked(self.focus_mode)
+
+    def toggle_ocr(self):
+        if self.ocr_panel.isHidden() and self.canvas.doc:
+            self.show_ocr(self.canvas.doc.ocr_text)
+        else:
+            self.hide_ocr()
 
     @staticmethod
     def button(layout, label, callback):
@@ -359,6 +497,7 @@ class Editor(QWidget):
         color = QColorDialog.getColor(QColor(self.canvas.color), self, "Annotation colour")
         if color.isValid():
             self.canvas.color = color.name()
+            self.colour_button.setIcon(icon('pen', color.name()))
             index = self.canvas.selected_index()
             if index is not None:
                 item = deepcopy(self.canvas.doc.annotations[index])
@@ -388,7 +527,9 @@ class Editor(QWidget):
         if doc:
             self.undo_button.setEnabled(bool(doc.undo_stack))
             self.redo_button.setEnabled(bool(doc.redo_stack))
-            self.dimensions.setText(f"{doc.base.width()} × {doc.base.height()} px  ·  Editable session" + ("  ·  Unsaved" if doc.dirty else ""))
+            state = 'Unsaved edits' if doc.revision != doc.saved_revision else 'Text not saved to history' if doc.ocr_text != doc.saved_ocr_text else 'Saved'
+            self.dimensions.setText(f"{doc.base.width()} × {doc.base.height()} px  ·  {state}")
+            self.update_properties()
             if self.ocr_text.toPlainText() != doc.ocr_text:
                 self.ocr_text.blockSignals(True)
                 self.ocr_text.setPlainText(doc.ocr_text)

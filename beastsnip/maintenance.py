@@ -156,12 +156,35 @@ def check_native_capture():
     print("Monitor mapping and native capture buffers passed. No screenshots were written to disk.")
 
 
+def configure_autosave(directory):
+    """Migrate once, preserving later folder choices and unrelated settings."""
+    settings = Settings()
+    original = json.loads(settings.path.read_text(encoding='utf-8')) if settings.path.exists() else {}
+    if not isinstance(original, dict):
+        raise ValueError('Settings must be a JSON object; the original file was left unchanged.')
+    target = Path(original.get('screenshots_dir') or directory)
+    target.mkdir(parents=True, exist_ok=True)
+    probe = target / ('.beastsnip-write-check-' + uuid.uuid4().hex)
+    try:
+        atomic_bytes(probe, b'')
+    finally:
+        probe.unlink(missing_ok=True)
+    if settings.path.exists():
+        shutil.copy2(settings.path, settings.path.with_name('settings.major-backup-' + uuid.uuid4().hex + '.json'))
+    original.setdefault('auto_save', True)
+    original['screenshots_dir'] = str(target)
+    atomic_bytes(settings.path, json.dumps(original, indent=2).encode('utf-8'))
+    print('Screenshots folder is writable: ' + str(target))
+    print('Automatic capture saving: ' + ('on' if original['auto_save'] else 'off (existing preference preserved)'))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--locate-ocr", action="store_true")
     action.add_argument("--repair-ocr", action="store_true")
     action.add_argument("--check-native", action="store_true")
+    action.add_argument("--configure-autosave", metavar="FOLDER")
     args = parser.parse_args()
     try:
         if args.locate_ocr:
@@ -169,7 +192,9 @@ def main():
             return 0
         windows.enable_dpi_awareness()
         app = QApplication.instance() or QApplication(["BeastSnip maintenance"])
-        if args.repair_ocr:
+        if args.configure_autosave:
+            configure_autosave(args.configure_autosave)
+        elif args.repair_ocr:
             repair_ocr()
         else:
             check_native_capture()

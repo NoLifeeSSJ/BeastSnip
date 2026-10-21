@@ -8,6 +8,14 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QHBoxLayout,
 class OCRTextEdit(QTextEdit):
     def event(self, event):
         if event.type() == QEvent.Type.ShortcutOverride:
+            # Workspace navigation remains available while typing. Editing
+            # shortcuts and printable tool letters belong to the text field.
+            modifiers = event.modifiers()
+            if event.key() in (Qt.Key.Key_F1, Qt.Key.Key_F5) or (
+                modifiers & Qt.KeyboardModifier.ControlModifier and (
+                    event.key() in (Qt.Key.Key_K, Qt.Key.Key_O) or
+                    event.key() == Qt.Key.Key_F and modifiers & Qt.KeyboardModifier.ShiftModifier)):
+                return False
             # Editing/copying OCR must never invoke the image editor's actions.
             event.accept()
             return True
@@ -19,7 +27,7 @@ class OCRTextView(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
         controls = QHBoxLayout()
         controls.addWidget(QLabel("Text size"))
         self.font_size = QSpinBox()
@@ -120,11 +128,12 @@ class OCRPanel(QWidget):
         self.setMinimumWidth(340)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        layout.setSpacing(6)
         title = QLabel("Extracted text")
         title.setObjectName("ocrHeading")
         layout.addWidget(title)
-        hint = QLabel("Edit or copy below. Save to History to keep the text.")
+        hint = QLabel("Editable · Save to History to keep text")
+        self.hint = hint
         hint.setWordWrap(True)
         layout.addWidget(hint)
         self.view = OCRTextView()
@@ -143,6 +152,10 @@ class OCRPanel(QWidget):
         close.clicked.connect(self.close_requested.emit)
         footer.addWidget(close)
         layout.addLayout(footer)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.hint.setVisible(event.size().height() >= 450)
 
     def expand(self):
         dialog = OCRTextDialog(self)

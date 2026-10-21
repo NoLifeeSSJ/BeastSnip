@@ -8,7 +8,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'BeastSnip installation requires Windows 11.' }
-$expectedVersion = '1.0.3'
+$expectedVersion = '2.0.0'
 
 function Find-BeastPython {
     $candidates = [System.Collections.Generic.List[string]]::new()
@@ -115,6 +115,10 @@ try {
     Write-Host '[6/7] Testing Windows monitor mapping and capture buffers...' -ForegroundColor Cyan
     & $venv -m beastsnip.maintenance --check-native
     if ($LASTEXITCODE -ne 0) { throw 'Native monitor/capture validation failed. See the display diagnosis above; the updater has not passed all checks.' }
+
+    Write-Host 'Preparing automatic PNG saving in C:\SnipsV1\Screenshots...' -ForegroundColor Cyan
+    & $venv -m beastsnip.maintenance --configure-autosave 'C:\SnipsV1\Screenshots'
+    if ($LASTEXITCODE -ne 0) { throw 'The Screenshots folder or auto-save configuration could not be prepared. See the folder error above.' }
 
     Write-Host '[7/7] Updating the desktop shortcut...' -ForegroundColor Cyan
     $desktop = [Environment]::GetFolderPath('DesktopDirectory')

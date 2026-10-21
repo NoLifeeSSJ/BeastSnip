@@ -4,7 +4,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QSlider, QSpinBox, QVBoxLayout, QWidget, QSizePolicy)
+    QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget, QSizePolicy)
 
 from .windows import parse_hotkey
 
@@ -13,47 +13,71 @@ class SettingsDialog(QDialog):
     def __init__(self, settings, parent=None):
         super().__init__(parent)
         self.setWindowTitle("BeastSnip settings")
-        self.setMinimumWidth(580)
+        self.setMinimumWidth(620)
+        self.resize(680, 580)
         self.settings, self.fields = settings, {}
         layout = QVBoxLayout(self)
-        form = QFormLayout()
-        for key, title, folder in [
-            ("save_dir", "Default export folder", True), ("history_dir", "History folder", True),
-            ("ocr_path", "Tesseract executable (optional)", False),
-            ("ocr_data_dir", "OCR language folder (optional)", True),
+        layout.setContentsMargins(20, 18, 20, 18)
+        heading = QLabel('Make BeastSnip yours')
+        heading.setObjectName('sectionTitle')
+        layout.addWidget(heading)
+        tabs = QTabWidget()
+        layout.addWidget(tabs, 1)
+        forms = {}
+        for name in ('Captures & storage', 'Workspace', 'Offline OCR'):
+            page = QWidget()
+            form = QFormLayout(page)
+            form.setContentsMargins(16, 20, 16, 16)
+            form.setSpacing(14)
+            forms[name] = form
+            tabs.addTab(page, name)
+        for key, title, folder, tab in [
+            ('screenshots_dir', 'Screenshots folder', True, 'Captures & storage'),
+            ('save_dir', 'Save As default folder', True, 'Captures & storage'),
+            ('history_dir', 'Saved History folder', True, 'Captures & storage'),
+            ('ocr_path', 'Tesseract executable', False, 'Offline OCR'),
+            ('ocr_data_dir', 'Language files folder', True, 'Offline OCR'),
         ]:
             row = QHBoxLayout()
             field = QLineEdit(settings[key])
             self.fields[key] = field
             row.addWidget(field)
-            browse = QPushButton("Browse…")
+            browse = QPushButton('Browse…')
             def choose(checked=False, field=field, folder=folder):
-                path = QFileDialog.getExistingDirectory(self, "Choose folder", field.text()) if folder else QFileDialog.getOpenFileName(self, "Tesseract executable", field.text(), "Executable (*.exe);;All files (*)")[0]
+                path = QFileDialog.getExistingDirectory(self, 'Choose folder', field.text()) if folder else QFileDialog.getOpenFileName(self, 'Tesseract executable', field.text(), 'Executable (*.exe);;All files (*)')[0]
                 if path:
                     field.setText(path)
             browse.clicked.connect(choose)
             row.addWidget(browse)
-            form.addRow(title, row)
-        for key, title in [("hotkey", "Region shortcut"), ("ocr_language", "OCR language(s)")]:
+            forms[tab].addRow(title, row)
+        for key, title, tab in [('hotkey', 'Global region shortcut', 'Workspace'), ('ocr_language', 'OCR language(s)', 'Offline OCR')]:
             field = QLineEdit(settings[key])
             self.fields[key] = field
-            form.addRow(title, field)
+            forms[tab].addRow(title, field)
         quality = QSpinBox()
         quality.setRange(1, 100)
-        quality.setValue(settings["jpeg_quality"])
-        self.fields["jpeg_quality"] = quality
-        form.addRow("JPEG quality (white background)", quality)
-        for key, title in [("auto_copy", "Copy automatically after capture"),
-                           ("auto_history", "Save captures automatically to history"),
-                           ("close_to_tray", "Closing the window minimises to tray")]:
+        quality.setValue(settings['jpeg_quality'])
+        self.fields['jpeg_quality'] = quality
+        forms['Workspace'].addRow('JPEG quality', quality)
+        for key, title, tab in [
+            ('auto_save', 'Automatically save new captures and pasted images', 'Captures & storage'),
+            ('auto_history', 'Also add new captures to Saved History', 'Captures & storage'),
+            ('auto_copy', 'Copy new captures to the clipboard', 'Workspace'),
+            ('close_to_tray', 'Keep running in the tray when I close the window', 'Workspace')]:
             field = QCheckBox(title)
             field.setChecked(settings[key])
             self.fields[key] = field
-            form.addRow(field)
-        layout.addLayout(form)
-        note = QLabel("History is off by default. Automatic history saves the initial capture before editing.\nChanging history folders opens a separate gallery; existing items stay in the old folder.\nRedacting never erases earlier exports or clipboard copies.\nOCR stays on this computer. Tesseract and the chosen languages are installed separately.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+            forms[tab].addRow(field)
+        notes = {
+            'Captures & storage': 'A new capture is saved as a PNG before editing. Later image edits update that same PNG automatically. Separate exports, history items and earlier clipboard copies remain independent.\n\nFolder and auto-save preferences apply to new captures. Captures already open continue saving to their existing file. History retains searchable text only when you save it there.',
+            'Workspace': 'Ctrl+K finds any action. F1 shows keyboard shortcuts. Tool controls appear only when relevant. JPEG exports use a white background. The capture menu also lets you choose a delay and monitor.',
+            'Offline OCR': 'OCR runs on this computer. English uses eng; multiple languages use codes such as eng+deu. Leave paths empty for automatic discovery. Use Repair-OCR.ps1 if the runtime or a language is missing.'
+        }
+        for tab, text in notes.items():
+            note = QLabel(text)
+            note.setWordWrap(True)
+            note.setObjectName('muted')
+            forms[tab].addRow(note)
         self.error = QLabel()
         self.error.setStyleSheet("color:#ffb0b8")
         self.error.setWordWrap(True)
@@ -73,8 +97,8 @@ class SettingsDialog(QDialog):
         try:
             values = self.values()
             parse_hotkey(values["hotkey"])
-            if not values["save_dir"] or not values["history_dir"]:
-                raise ValueError("Choose a save folder and a history folder.")
+            if not values["save_dir"] or not values["history_dir"] or not values["screenshots_dir"]:
+                raise ValueError("Choose Screenshots, export and history folders.")
             if not values["ocr_language"]:
                 raise ValueError("Choose an OCR language, for example eng.")
         except ValueError as error:

@@ -31,7 +31,7 @@ def atomic_bytes(path, data):
 class Settings:
     defaults = {
         "delay": 0, "hotkey": "Ctrl+Alt+S", "auto_copy": False,
-        "auto_history": False, "close_to_tray": True, "close_explained": False,
+        "auto_history": False, "auto_save": True, "screenshots_dir": r"C:\SnipsV1\Screenshots" if os.name == "nt" and not os.environ.get("BEASTSNIP_DATA_DIR") else "", "close_to_tray": True, "close_explained": False,
         "save_dir": str(Path.home() / "Pictures" / "BeastSnip"),
         "history_dir": "", "jpeg_quality": 92, "ocr_path": "", "ocr_language": "eng", "ocr_data_dir": "",
     }
@@ -40,6 +40,8 @@ class Settings:
         self.path = data_dir() / "settings.json"
         self.values = self.defaults.copy()
         self.values["history_dir"] = str(data_dir() / "history")
+        if not self.values["screenshots_dir"]:
+            self.values["screenshots_dir"] = str(data_dir() / "Screenshots")
         try:
             loaded = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(loaded, dict):
