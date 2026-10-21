@@ -8,7 +8,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'BeastSnip installation requires Windows 11.' }
-$expectedVersion = '1.0.2'
+$expectedVersion = '1.0.3'
 
 function Find-BeastPython {
     $candidates = [System.Collections.Generic.List[string]]::new()
@@ -56,7 +56,7 @@ Close-BeastSnipForUpdate -InstallDir $destination -CloseRunningApp:$CloseRunning
 Write-Host '[2/7] Backing up and updating application files...' -ForegroundColor Cyan
 if (-not [string]::Equals($source.TrimEnd('\'), $destination.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
     # Source-only allowlist: never copy an existing venv, user history, or Git data.
-    $files = @('beastsnip', 'tests', 'tools', 'run_beastsnip.py', 'requirements.txt', 'requirements-build.txt', 'Install.ps1', 'Update.ps1', 'Repair-OCR.ps1', 'Launch.ps1', 'Launch.cmd', 'Build.ps1', 'README.md', 'VERIFICATION.md')
+    $files = @('beastsnip', 'tests', 'tools', 'run_beastsnip.py', 'requirements.txt', 'requirements-build.txt', 'Install.ps1', 'Update.ps1', 'Repair-OCR.ps1', 'Launch.ps1', 'Launch.cmd', 'Build.ps1', 'README.md', 'VERIFICATION.md', 'CHANGELOG.md')
     $backupRoot = Join-Path $env:LOCALAPPDATA ('BeastSnip\setup-backups\' + [guid]::NewGuid().ToString('N'))
     foreach ($file in $files) {
         $from = Join-Path $source $file

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QButtonGroup, QColorDialog, QComboBox, QGraphicsI
     QPushButton, QScrollArea, QSpinBox, QSplitter, QTextEdit, QVBoxLayout, QWidget)
 
 from .document import Annotation
+from .ocr_panel import OCRPanel
 
 
 class AnnotationItem(QGraphicsObject):
@@ -302,24 +303,21 @@ class Editor(QWidget):
         self.button(controls, "Fit", self.canvas.fit_image)
         self.button(controls, "1:1", self.canvas.actual_size)
         layout.addLayout(controls)
-        self.splitter = QSplitter(Qt.Orientation.Vertical)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setObjectName("editorSplitter")
+        self.splitter.setHandleWidth(9)
+        self.splitter.setChildrenCollapsible(False)
+        self.canvas.setMinimumSize(240, 180)
         self.splitter.addWidget(self.canvas)
-        panel = QWidget()
-        ocr_layout = QVBoxLayout(panel)
-        ocr_layout.addWidget(QLabel("Extracted text · editable · stored only when you save to history"))
-        self.ocr_text = QTextEdit()
-        self.ocr_text.setAcceptRichText(False)
+        self.ocr_panel = OCRPanel()
+        self.ocr_text = self.ocr_panel.text_edit
         self.ocr_text.textChanged.connect(self.ocr_text_edited)
-        ocr_layout.addWidget(self.ocr_text)
-        actions = QHBoxLayout()
-        self.button(actions, "Copy Text", self.copy_text)
-        self.button(actions, "Close text panel", panel.hide)
-        actions.addStretch()
-        ocr_layout.addLayout(actions)
-        self.splitter.addWidget(panel)
-        panel.hide()
-        self.ocr_panel = panel
-        self.splitter.setStretchFactor(0, 4)
+        self.ocr_panel.close_requested.connect(self.hide_ocr)
+        self.splitter.addWidget(self.ocr_panel)
+        self.ocr_panel.hide()
+        self._ocr_width = None
+        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(1, 0)
         layout.addWidget(self.splitter, 1)
         bottom = QHBoxLayout()
         self.button(bottom, "Copy Image", self.copy_requested.emit)
@@ -345,8 +343,6 @@ class Editor(QWidget):
             action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             action.triggered.connect(callback)
             self.addAction(action)
-        # Text entry must retain normal text selection/copy/edit shortcuts.
-        self.ocr_text.installEventFilter(self)
 
     @staticmethod
     def button(layout, label, callback):
@@ -358,13 +354,6 @@ class Editor(QWidget):
     def escape(self):
         self.canvas.set_tool("select")
         self.select_button.setChecked(True)
-
-    def eventFilter(self, watched, event):
-        from PySide6.QtCore import QEvent
-        if watched is self.ocr_text and event.type() == QEvent.Type.ShortcutOverride:
-            event.accept()
-            return True
-        return super().eventFilter(watched, event)
 
     def choose_colour(self):
         color = QColorDialog.getColor(QColor(self.canvas.color), self, "Annotation colour")
@@ -389,7 +378,7 @@ class Editor(QWidget):
             self.canvas.doc.changed.disconnect(self.update_state)
         self.canvas.set_document(doc)
         self.ocr_text.clear()
-        self.ocr_panel.hide()
+        self.hide_ocr()
         self.escape()
         doc.changed.connect(self.update_state)
         self.update_state()
@@ -407,8 +396,18 @@ class Editor(QWidget):
 
     def show_ocr(self, text):
         self.ocr_text.setPlainText(text)
-        self.ocr_panel.show()
-        self.splitter.setSizes([600, 180])
+        if self.ocr_panel.isHidden():
+            self.ocr_panel.show()
+            total = self.splitter.width() - self.splitter.handleWidth()
+            desired = self._ocr_width or max(380, round(total * .36))
+            width = max(self.ocr_panel.minimumWidth(), min(desired, total - self.canvas.minimumWidth()))
+            self.splitter.setSizes([max(self.canvas.minimumWidth(), total - width), width])
+        self.ocr_text.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def hide_ocr(self):
+        if not self.ocr_panel.isHidden():
+            self._ocr_width = self.ocr_panel.width()
+        self.ocr_panel.hide()
 
     def ocr_text_edited(self):
         if self.canvas.doc:

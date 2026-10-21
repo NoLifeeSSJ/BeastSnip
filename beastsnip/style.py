@@ -21,4 +21,10 @@ QStatusBar { color: #bab8cd; background: #14151d; }
 QCheckBox { spacing: 9px; padding: 5px; }
 QLabel#hero { font-size: 30px; font-weight: 700; color: #c9adff; }
 QToolTip { background: #302a40; color: #fff; border: 1px solid #9470d2; padding: 6px; }
+QWidget#ocrPanel { background: #1d1e2a; border: 1px solid #393449; border-radius: 10px; }
+QWidget#ocrPanel QLabel, QWidget#ocrPanel QCheckBox { background: transparent; }
+QLabel#ocrHeading { font-size: 19px; font-weight: 600; color: #c9adff; }
+QTextEdit#ocrTextEditor { background: #101119; border-color: #514460; selection-background-color: #7950c7; }
+QSplitter#editorSplitter::handle { background: #302a40; border-radius: 3px; margin: 4px 2px; }
+QSplitter#editorSplitter::handle:hover { background: #a78bfa; }
 """

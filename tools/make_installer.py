@@ -11,7 +11,7 @@ VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / 'beastsnip/__init__.py')
 OUT = ROOT / "delivery"
 OUT.mkdir(exist_ok=True)
 FILES = [
-    "Install.ps1", "Update.ps1", "Repair-OCR.ps1", "Launch.ps1", "Launch.cmd", "Build.ps1", "README.md", "VERIFICATION.md",
+    "Install.ps1", "Update.ps1", "Repair-OCR.ps1", "Launch.ps1", "Launch.cmd", "Build.ps1", "README.md", "VERIFICATION.md", "CHANGELOG.md",
     "requirements.txt", "requirements-build.txt", "run_beastsnip.py", ".gitignore", ".gitattributes",
 ]
 for directory in ("beastsnip", "tests", "tools"):
@@ -84,6 +84,8 @@ installer.write_text(script.replace("__OCR_PARAMETER__", "[switch]$InstallOCR,")
 updater.write_text(script.replace("    __OCR_PARAMETER__\n", "").replace("__RUN__", "& (Join-Path $source 'Update.ps1') -InstallDir $InstallDir -CloseRunningApp:$CloseRunningApp -Launch:$Launch"), encoding="utf-8", newline="\n")
 repair = OUT / f"Repair-BeastSnip-{VERSION}.ps1"
 repair.write_bytes(updater.read_bytes())
+versioned_update = OUT / f"Update-BeastSnip-{VERSION}.ps1"
+versioned_update.write_bytes(updater.read_bytes())
 (OUT / "BeastSnip-source.zip").write_bytes(payload)
-(OUT / "SHA256SUMS.txt").write_text("\n".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in (installer, updater, repair, OUT / "BeastSnip-source.zip")) + "\n", encoding="ascii")
+(OUT / "SHA256SUMS.txt").write_text("\n".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in (installer, updater, versioned_update, repair, OUT / "BeastSnip-source.zip")) + "\n", encoding="ascii")
 print(f"Created setup/updater scripts and source ZIP ({len(payload):,} bytes).")

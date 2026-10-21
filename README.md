@@ -2,23 +2,29 @@
 
 A local Windows 11 screenshot application written in Python 3.12 and PySide6. Dark interface, purple accents, editable annotations, opaque redaction, private history, offline OCR and pinned screenshots. No account, paid API, browser wrapper or remote image processing.
 
-[Repair/update v1.0.2](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Repair-BeastSnip-1.0.2.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
+[Update v1.0.3](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-1.0.3.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
 
-![BeastSnip editor with a sample helpdesk screenshot](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-editor.png)
+![BeastSnip OCR results in a full-height sidebar](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-ocr-sidebar.png)
 
-## Update and repair an existing installation (1.0.2)
+## What changed in 1.0.3
 
-Save any open capture first. Download [Repair-BeastSnip-1.0.2.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Repair-BeastSnip-1.0.2.ps1) to Downloads, then run:
+OCR results now open in a full-height sidebar beside the image. Drag the purple divider to give the text more room. **Expand Text** opens a large, resizable window that can be maximised; edits stay in sync when you return to the image. Choose a reading size from 10 to 24 pt and toggle line wrapping. Copy Text and text-editing shortcuts work in both views.
+
+The sidebar keeps your chosen width when extracting again or reopening it within the same session. Closing it gives the image the full editor width again. Redacting or changing the image still clears stale OCR from both views. The OCR engine, languages, history and preferences are preserved by the update. See [CHANGELOG.md](CHANGELOG.md).
+
+## Update and repair an existing installation (1.0.3)
+
+Save any open capture first. Download [Update-BeastSnip-1.0.3.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-1.0.3.ps1) to Downloads, then run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Repair-BeastSnip-1.0.2.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-BeastSnip-1.0.3.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
 ```
 
-This single self-contained script replaces the application with version 1.0.2, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
+This single self-contained script replaces the application with version 1.0.3, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
 
 **`-CloseRunningApp` explicitly closes BeastSnip in the target installation, including when it is hidden in the tray. Unsaved in-memory captures/edits will be discarded, so save them first.** Other Python programs and other BeastSnip installations are not targeted. The updater rechecks process identity before stopping it. Without this switch it stops immediately with instructions if BeastSnip is running; it no longer waits silently for two minutes. You can instead use tray → Quit BeastSnip and omit the close switch.
 
-The script displays seven stages, clears generated application bytecode caches and checks the installed package version before testing it. Cache cleanup prevents equal-size source changes with matching archive timestamps from loading old Python bytecode. Settings, history, exports and the virtual environment are outside that cleanup. It prints **`UPDATE COMPLETE - BeastSnip 1.0.2`** only after the required checks pass, then launches the new version. The title bar also shows `BeastSnip 1.0.2`. A failed/cancelled update does not launch the app or claim completion. Logs are saved to `%LOCALAPPDATA%\BeastSnip\update-logs`; failures show the log path. The new filename distinguishes this repair from an older `Update-BeastSnip.ps1` download.
+The script displays seven stages, clears generated application bytecode caches and checks the installed package version before testing it. Cache cleanup prevents equal-size source changes with matching archive timestamps from loading old Python bytecode. Settings, history, exports and the virtual environment are outside that cleanup. It prints **`UPDATE COMPLETE - BeastSnip 1.0.3`** only after the required checks pass, then launches the new version. The title bar also shows `BeastSnip 1.0.3`. A failed/cancelled update does not launch the app or claim completion. Logs are saved to `%LOCALAPPDATA%\BeastSnip\update-logs`; failures show the log path. The new filename distinguishes this repair from an older `Update-BeastSnip.ps1` download.
 
 The monitor fix separates Qt's friendly model name (for example `NE160QDM-NM9`) from GDI's capture identifier (`\\.\DISPLAY1`). Region overlays use a unique device-name or position/DPI match; list order is never used as a guess. Friendly and duplicate model names no longer make a connected monitor appear disconnected. A real display-layout change refreshes the selector and asks for a retry.
 
