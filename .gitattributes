@@ -1,0 +1,5 @@
+* text=auto
+/delivery/* -text
+*.ico -text
+*.png -text
+*.zip -text
