@@ -3,7 +3,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen" if os.name != "nt" else "wi
 import unittest
 
 from PySide6.QtCore import QPointF, Qt, QTimer
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QFontMetricsF, QTextCursor
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QTextEdit
 
@@ -40,19 +40,43 @@ class OCRPanelTests(unittest.TestCase):
         editor = self.editor()
         editor.show_ocr(LONG_TEXT)
         APP.processEvents()
-        self.assertGreaterEqual(editor.ocr_text.viewport().height(), 400)
-        self.assertGreaterEqual(editor.ocr_text.viewport().width(), 280)
+        self.assert_readable_sidebar(editor)
         self.assertGreater(editor.ocr_panel.x(), editor.canvas.x())
         self.assertLessEqual(abs(editor.ocr_panel.height() - editor.canvas.height()), 2)
         self.assertEqual(editor.ocr_text.document().defaultFont().pointSize(), 12)
         self.assertGreater(editor.ocr_text.verticalScrollBar().maximum(), 0)
         self.assertEqual(editor.ocr_text.toPlainText(), LONG_TEXT)
 
+    def assert_readable_sidebar(self, editor, minimum_lines=10, minimum_height_share=.55):
+        # Native fonts, borders and scrollbars vary by Windows theme and DPI.
+        # Check useful reading space rather than a Linux-specific pixel count.
+        viewport = editor.ocr_text.viewport()
+        metrics = QFontMetricsF(editor.ocr_text.font())
+        self.assertGreaterEqual(viewport.height(), minimum_lines * metrics.lineSpacing())
+        self.assertGreaterEqual(viewport.height(), editor.ocr_panel.height() * minimum_height_share)
+        self.assertGreaterEqual(viewport.width(), 24 * metrics.averageCharWidth())
+        self.assertGreaterEqual(viewport.width(), editor.ocr_panel.width() * .75)
+
+    def test_reported_windows_viewport_is_readable_but_a_squashed_box_is_rejected(self):
+        editor = self.editor()
+        editor.show_ocr(LONG_TEXT)
+        APP.processEvents()
+        chrome = editor.ocr_text.height() - editor.ocr_text.viewport().height()
+        editor.ocr_text.setFixedHeight(396 + chrome)
+        APP.processEvents()
+        self.assertEqual(editor.ocr_text.viewport().height(), 396)
+        self.assert_readable_sidebar(editor)
+        editor.ocr_text.setFixedHeight(140 + chrome)
+        APP.processEvents()
+        self.assertEqual(editor.ocr_text.viewport().height(), 140)
+        with self.assertRaises(AssertionError):
+            self.assert_readable_sidebar(editor)
+
     def test_laptop_window_keeps_text_readable_and_long_paths_wrap(self):
         editor = self.editor(900, 600)
         editor.show_ocr("C:/" + "long-path-segment/" * 60)
         APP.processEvents()
-        self.assertGreaterEqual(editor.ocr_text.viewport().height(), 220)
+        self.assert_readable_sidebar(editor, minimum_lines=8, minimum_height_share=.45)
         self.assertGreaterEqual(editor.ocr_panel.width(), 340)
         self.assertEqual(editor.ocr_text.horizontalScrollBar().maximum(), 0)
         self.assertTrue(editor.ocr_panel.copy_button.isVisible())

@@ -1,13 +1,19 @@
 # Verification record
 
-Updated to 2.0.0 on 21 October 2026 in Linux with Python 3.12.14 and PySide6 6.10.2. The user requested a full workspace redesign, preservation of existing features, and automatic saving to `C:\SnipsV1\Screenshots`. The existing installation remains `C:\SnipV1`. Native Windows capture/installer checks remain separate from the cloud UI, file, and control-flow checks below.
+Updated to 2.0.1 on 21 October 2026 in Linux with Python 3.12.14 and PySide6 6.10.2. The user requested a full workspace redesign, preservation of existing features, and automatic saving to `C:\SnipsV1\Screenshots`. The existing installation remains `C:\SnipV1`. Native Windows capture/installer checks remain separate from the cloud UI, file, and control-flow checks below.
+
+## Windows installation report and 2.0.1 correction
+
+The user's 2.0.0 Windows run executed 63 tests: 60 passed, two PATH-dependent OCR integration tests were skipped, and one layout test failed (`396 not greater than or equal to 400`). The updater correctly stopped before claiming completion; OCR repair/native capture checks, folder migration and shortcut refresh still needed to run. The `FileExistsError` line was deliberately induced by the autosave failure/retry test, which passed.
+
+Version 2.0.1 changes the sidebar layout test to actual-font readable-line and proportional-space assertions. Its regression test explicitly exercises a 396-pixel viewport and verifies that a 140-pixel box is rejected. It captures expected autosave failure logs without suppressing unexpected errors. No required installer checks were skipped or disabled. The corrected updater has not yet run on the user's Windows laptop.
 
 ## Checks actually performed
 
 - Python compilation and imports: passed.
 - `pip check`: passed; no broken dependencies.
 - Real Qt UI offscreen startup: passed; window/editor construction, annotation, crop, undo/redo, pixel dimensions, event loop and clean exit exercised.
-- **63 automated tests executed, 63 passed, 0 failures, 0 skipped** in the development environment:
+- **64 automated tests executed, 64 passed, 0 failures, 0 skipped** in the development environment:
   - All annotation tools render real pixels.
   - Opaque redaction across every pixel inside a rectangle; reverse-direction drawing.
   - PNG flattening strips source text metadata; original pixels remain only in the in-memory editable model.
@@ -29,7 +35,7 @@ Updated to 2.0.0 on 21 October 2026 in Linux with Python 3.12.14 and PySide6 6.1
   - Missing-language detection happens before an image is submitted; failed English checksums preserve existing files.
   - OCR repair preserves unrelated/unknown settings and makes a backup; failed recognition does not overwrite settings.
 - Actual OCR repair ran against the local Tesseract runtime. A fresh app-managed English language file was downloaded from pinned official commit `87416418657359cb625c412a48b6e1d6d41c29bd`, verified against SHA256 `7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2`, and passed real recognition and opaque-image checks.
-- Eight new OCR UI tests passed at normal scale and again with `QT_SCALE_FACTOR=1.5`: full-height layout, a 900 × 600 laptop window, long-path wrapping, chosen panel width, text copy/edit/undo, synchronised expanded-view edits and reading controls, independent wrapping when returning from the expanded view, modal reader behaviour, and clearing stale text after redaction/new images.
+- Nine OCR UI tests passed in the Linux/offscreen environment with Qt Fusion and Windows styles at 100%, 125%, 150% and 200% scaling: full-height layout, a 900 × 600 laptop window, long-path wrapping, chosen panel width, text copy/edit/undo, synchronised expanded-view edits and reading controls, independent wrapping when returning from the expanded view, modal reader behaviour, and clearing stale text after redaction/new images.
 - Seventeen major-update tests cover serial capture writes, flattening and metadata removal, latest-edit/redaction precedence, atomic write failure and retry, undo/redo to the same PNG, retiring a session, keeping OCR unsaved when only PNG pixels are saved, backed-up settings migration and preservation of later choices, actual capture/paste/file/library flows, search, tool shortcuts and contextual controls, Focus mode, small-window button geometry, text-entry shortcut isolation, and action search/modal dismissal. Autosave tests use real PNG files and controlled worker completion; workspace tests use real queued background workers.
 - The workspace and OCR UI tests also passed with `QT_SCALE_FACTOR=1.5`. The 900 × 600 window keeps header/footer actions inside its bounds. The OCR helper text hides in short panels; Expand Text remains available.
 - Save completion updates the indicator without emitting an image-change event or rebuilding an in-progress canvas. Application shutdown/discard flushes pending image saves and waits for active writes.

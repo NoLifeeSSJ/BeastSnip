@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.1 — 21 October 2026
+
+- Fixed an installer self-test that rejected a readable 396-pixel OCR text viewport on Windows because it assumed a 400-pixel minimum from the cloud environment.
+- Replaced fixed sidebar viewport pixel thresholds with readable-line, usable-width and proportional-space checks based on the actual font metrics and layout.
+- Added a regression test that accepts the reported 396-pixel viewport and rejects the old squashed 140-pixel presentation.
+- Captured the deliberately triggered autosave failure log inside its test, so expected failure/retry coverage does not print a misleading error during a successful install.
+- Shipped a versioned 2.0.1 updater that runs the full required checks and can finish an installation stopped by 2.0.0. The 2.0 workspace, OCR, autosave, history and existing preferences are retained.
+
 ## 2.0.0 — 21 October 2026
 
 - Redesigned the native workspace around a compact header, a grouped icon tool rail, contextual editing controls, and focused copy/save actions. All twelve annotation/navigation tools remain available.

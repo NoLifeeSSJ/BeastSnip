@@ -2,9 +2,15 @@
 
 A local Windows 11 screenshot application written in Python 3.12 and PySide6. Dark interface, purple accents, editable annotations, opaque redaction, private history, offline OCR and pinned screenshots. No account, paid API, browser wrapper or remote image processing.
 
-[Update v2.0.0](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.0.0.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
+[Update v2.0.1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.0.1.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
 
 ![BeastSnip 2.0 editing workspace](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.0-editor.png)
+
+## Windows update fix in 2.0.1
+
+Version 2.0.0 could stop during self-tests when Windows rendered the OCR text viewport at 396 pixels rather than the test's hardcoded 400. Version 2.0.1 measures readable lines, usable width and the text area's share of the sidebar instead. A regression test accepts the reported 396-pixel layout and still rejects a squashed 140-pixel box. The installer continues to run the full tests, OCR checks, native capture checks, folder setup and shortcut update.
+
+Expected errors from the autosave failure/retry test are now captured by that test, so a successful test no longer prints a misleading `ERROR:root` line. If the previous updater stopped at self-tests, rerun the 2.0.1 updater below to complete installation. Existing files and settings are preserved.
 
 ## BeastSnip 2.0: the workspace update
 
@@ -29,19 +35,19 @@ The initial capture is written **before editing**. Edits replace its current PNG
 
 ![BeastSnip 2.0 screenshot library](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.0-library.png)
 
-## Update and repair an existing installation (2.0.0)
+## Update and repair an existing installation (2.0.1)
 
-Save any open capture first. Download [Update-BeastSnip-2.0.0.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.0.0.ps1) to Downloads, then run:
+Save any open capture first. Download [Update-BeastSnip-2.0.1.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.0.1.ps1) to Downloads, then run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-BeastSnip-2.0.0.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-BeastSnip-2.0.1.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
 ```
 
-This single self-contained script replaces the application with version 2.0.0, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
+This single self-contained script replaces the application with version 2.0.1, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
 
 **`-CloseRunningApp` explicitly closes BeastSnip in the target installation, including when it is hidden in the tray. Unsaved in-memory captures/edits will be discarded, so save them first.** Other Python programs and other BeastSnip installations are not targeted. The updater rechecks process identity before stopping it. Without this switch it stops immediately with instructions if BeastSnip is running; it no longer waits silently for two minutes. You can instead use tray → Quit BeastSnip and omit the close switch.
 
-The script displays seven stages, clears generated application bytecode caches and checks the installed package version before testing it. Cache cleanup prevents equal-size source changes with matching archive timestamps from loading old Python bytecode. Settings, history, exports and the virtual environment are outside that cleanup. It prints **`UPDATE COMPLETE - BeastSnip 2.0.0`** only after the required checks pass, then launches the new version. The title bar also shows `BeastSnip 2.0.0`. A failed/cancelled update does not launch the app or claim completion. Logs are saved to `%LOCALAPPDATA%\BeastSnip\update-logs`; failures show the log path. The new filename distinguishes this repair from an older `Update-BeastSnip.ps1` download.
+The script displays seven stages, clears generated application bytecode caches and checks the installed package version before testing it. Cache cleanup prevents equal-size source changes with matching archive timestamps from loading old Python bytecode. Settings, history, exports and the virtual environment are outside that cleanup. It prints **`UPDATE COMPLETE - BeastSnip 2.0.1`** only after the required checks pass, then launches the new version. The title bar also shows `BeastSnip 2.0.1`. A failed/cancelled update does not launch the app or claim completion. Logs are saved to `%LOCALAPPDATA%\BeastSnip\update-logs`; failures show the log path. The new filename distinguishes this repair from an older `Update-BeastSnip.ps1` download.
 
 The monitor fix separates Qt's friendly model name (for example `NE160QDM-NM9`) from GDI's capture identifier (`\\.\DISPLAY1`). Region overlays use a unique device-name or position/DPI match; list order is never used as a guess. Friendly and duplicate model names no longer make a connected monitor appear disconnected. A real display-layout change refreshes the selector and asks for a retry.
 

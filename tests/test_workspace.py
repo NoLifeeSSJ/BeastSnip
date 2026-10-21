@@ -65,8 +65,10 @@ class WorkspaceTests(unittest.TestCase):
         blocked.write_text('keep')
         w.settings.values['screenshots_dir'] = str(blocked / 'Screenshots')
         w.show()
-        w.captured(white_image())
-        settle(w)
+        with self.assertLogs(level='ERROR') as failure_log:
+            w.captured(white_image())
+            settle(w)
+        self.assertTrue(any('Background operation failed' in message for message in failure_log.output))
         self.assertTrue(w.save_warning.isVisible())
         self.assertTrue(w.doc.dirty)
         self.assertEqual(w.editor.save_status.text(), 'Save failed · Retry with Save')
