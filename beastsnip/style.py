@@ -56,6 +56,17 @@ QWidget#recoveryBanner { background: #1a3034; border: 1px solid #375b61; border-
 QWidget#recoveryBanner QLabel { background: transparent; color: #c5eee5; }
 QWidget#quickPreview { background: #1a2030; border: 1px solid #8b6fb9; border-radius: 12px; }
 QWidget#toolRail, QWidget#contextBar { background: #1a1f2b; border: 1px solid #2b3346; border-radius: 10px; }
+QWidget#contextBar QLabel { background: transparent; }
+QWidget#contextBar QSpinBox { background: #252c3c; border-color: #41485f; padding: 7px 28px 7px 10px; }
+QWidget#drawingPopup { background: #1c2230; border: 1px solid #62607b; border-radius: 12px; }
+QWidget#drawingPopupContent { background: #1c2230; }
+QWidget#drawingPopup QLabel, QWidget#drawingPopup QCheckBox { background: transparent; }
+QToolButton#colourSwatch { padding: 4px; background: transparent; border: 2px solid transparent; }
+QToolButton#colourSwatch:hover { background: #34394d; }
+QToolButton#colourSwatch:checked { border-color: #c5a4ff; background: #352d4c; }
+QSlider::groove:horizontal { height: 6px; background: #3b4358; border-radius: 3px; }
+QSlider::sub-page:horizontal { background: #a78bfa; border-radius: 3px; }
+QSlider::handle:horizontal { width: 16px; margin: -6px 0; background: #d9c8ff; border-radius: 8px; }
 QLabel#railHeading { background: transparent; color: #8290aa; font-size: 9px; font-weight: 600; padding: 3px 2px; }
 QToolButton#annotationTool { background: transparent; border: 1px solid transparent; padding: 4px 1px; font-size: 10px; }
 QToolButton#annotationTool:hover { background: #2a3041; border-color: #4e4c66; }

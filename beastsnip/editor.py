@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (QButtonGroup, QColorDialog, QComboBox, QGraphicsI
 
 from .document import Annotation
 from .ocr_panel import OCRPanel
-from .ui import icon, tool_button
+from .ui import icon, swatch_icon, tool_button
+from .drawing import ColourPalette, StylePopup, DRAWING_TOOLS, FREEHAND, SHAPES, STROKED, defaults, validated_preferences
 
 
 class AnnotationItem(QGraphicsObject):
@@ -23,6 +24,9 @@ class AnnotationItem(QGraphicsObject):
     def boundingRect(self):
         extra = max(12, self.annotation.width * 3) if self.annotation.kind in ("highlight", "arrow") else 5
         return self.annotation.bounds().adjusted(-extra, -extra, extra, extra)
+
+    def shape(self):
+        return self.annotation.hit_path()
 
     def paint(self, painter, option, widget=None):
         item = deepcopy(self.annotation)
@@ -69,6 +73,11 @@ class Canvas(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.doc, self.tool, self.color = None, "select", "#a78bfa"
         self.stroke_width, self.font_size = 4, 24
+        self.opacity, self.line_style, self.cap = 100, 'solid', 'round'
+        self.fill_style, self.arrow_heads, self.smooth = 'none', 'end', True
+        self.preferences = {}
+        self.erasing, self.erased = False, False
+        self._scene_revision = 0
         self.preview, self.preview_item, self.origin = None, None, None
         self.auto_fit, self.pan_point = True, None
 
@@ -82,9 +91,16 @@ class Canvas(QGraphicsView):
         QTimer.singleShot(0, self.fit_image)
 
     def rebuild(self):
+        if self.doc:
+            if self.doc.revision < self._scene_revision:
+                self.erasing = False
+            self._scene_revision = self.doc.revision
+        selected = self.selected_index()
         self.preview_item, self.preview = None, None
+        self.scene().blockSignals(True)
         self.scene().clear()
         if not self.doc:
+            self.scene().blockSignals(False)
             return
         background = self.scene().addPixmap(QPixmap.fromImage(self.doc.base))
         background.setZValue(-1000)
@@ -94,18 +110,33 @@ class Canvas(QGraphicsView):
             self.scene().addItem(item)
             item.setZValue(index)
             item.setAcceptedMouseButtons(Qt.MouseButton.LeftButton if self.tool == "select" else Qt.MouseButton.NoButton)
+            if index == selected:
+                item.setSelected(True)
+        self.scene().blockSignals(False)
+        self.scene().selectionChanged.emit()
         if self.auto_fit:
             self.fit_image()
 
     def set_tool(self, tool):
+        if self.tool in DRAWING_TOOLS:
+            self.preferences[self.tool] = self.current_preferences()
         self.cancel()
         self.tool = tool
+        if tool in DRAWING_TOOLS:
+            for key, value in self.preferences.get(tool, defaults(tool)).items():
+                setattr(self, 'stroke_width' if key == 'width' else key, value)
         self.tool_changed.emit(tool)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag if tool == "pan" else QGraphicsView.DragMode.NoDrag)
         self.setCursor(Qt.CursorShape.OpenHandCursor if tool == "pan" else Qt.CursorShape.ArrowCursor if tool == "select" else Qt.CursorShape.CrossCursor)
         for item in self.scene().items():
             if isinstance(item, AnnotationItem):
                 item.setAcceptedMouseButtons(Qt.MouseButton.LeftButton if tool == "select" else Qt.MouseButton.NoButton)
+
+    def current_preferences(self):
+        return {key: getattr(self, 'stroke_width' if key == 'width' else key) for key in defaults('pen')}
+
+    def annotation(self, kind, points):
+        return Annotation(kind, points, **self.current_preferences())
 
     def commit_move(self, index, annotation):
         if self.doc and 0 <= index < len(self.doc.annotations):
@@ -117,12 +148,14 @@ class Canvas(QGraphicsView):
     def delete_selected(self):
         index = self.selected_index()
         if index is not None:
+            self.scene().clearSelection()
             self.doc.remove(index)
 
     def cancel(self):
         if self.preview_item:
             self.scene().removeItem(self.preview_item)
         self.preview, self.preview_item, self.origin = None, None, None
+        self.erasing = False
         self.scene().clearSelection()
 
     def fit_image(self):
@@ -171,17 +204,23 @@ class Canvas(QGraphicsView):
         if event.button() != Qt.MouseButton.LeftButton or self.tool in ("select", "pan"):
             return super().mousePressEvent(event)
         p = self.image_point(event)
+        if self.tool == 'eraser':
+            self.erasing, self.erased = True, False
+            self.erase_at(p)
+            return
         if self.tool == "text":
             text, ok = QInputDialog.getMultiLineText(self, "Text label", "Text")
             if ok and text:
-                self.doc.add(Annotation("text", [p], self.color, self.stroke_width, text, self.font_size))
+                item = self.annotation('text', [p]); item.text = text
+                self.doc.add(item)
             return
         if self.tool == "number":
             number = max((a.number for a in self.doc.annotations if a.kind == "number"), default=0) + 1
-            self.doc.add(Annotation("number", [p], self.color, number=number))
+            item = self.annotation('number', [p]); item.number = number
+            self.doc.add(item)
             return
         self.origin = p
-        self.preview = Annotation(self.tool, [p, p], self.color, self.stroke_width)
+        self.preview = self.annotation(self.tool, [p] if self.tool in FREEHAND else [p, p])
         self.update_preview()
 
     def update_preview(self):
@@ -198,6 +237,9 @@ class Canvas(QGraphicsView):
         self.preview_item.setZValue(100000)
 
     def mouseMoveEvent(self, event):
+        if self.erasing:
+            self.erase_at(self.image_point(event))
+            return
         if self.pan_point is not None:
             delta = event.position() - self.pan_point
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - round(delta.x()))
@@ -206,8 +248,10 @@ class Canvas(QGraphicsView):
             return
         if self.preview:
             p = self.image_point(event)
-            if self.tool in ("pen", "highlight"):
-                self.preview.points.append(p)
+            p = self.constrain(p, event.modifiers())
+            if self.tool in FREEHAND:
+                if QLineF(self.preview.points[-1], p).length() >= .5:
+                    self.preview.points.append(p)
             else:
                 self.preview.points[-1] = p
             self.update_preview()
@@ -215,14 +259,20 @@ class Canvas(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if self.erasing and event.button() == Qt.MouseButton.LeftButton:
+            self.erase_at(self.image_point(event)); self.erasing = False
+            return
         if event.button() == Qt.MouseButton.MiddleButton:
             self.pan_point = None
             return
         if self.preview and event.button() == Qt.MouseButton.LeftButton:
             item, tool = self.preview, self.tool
             rect = QRectF(item.points[0], self.image_point(event)).normalized()
-            if tool not in ("pen", "highlight"):
-                item.points[-1] = self.image_point(event)
+            end = self.constrain(self.image_point(event), event.modifiers())
+            if tool in FREEHAND:
+                if item.points[-1] != end: item.points.append(end)
+            else:
+                item.points[-1] = end
             self.cancel()
             if tool == "crop":
                 if rect.width() >= 2 and rect.height() >= 2:
@@ -230,29 +280,55 @@ class Canvas(QGraphicsView):
             elif tool == "ocr":
                 if rect.width() >= 2 and rect.height() >= 2:
                     self.area_selected.emit(rect)
-            elif tool in ("pen", "highlight") or QLineF(item.points[0], item.points[-1]).length() >= 2:
+            elif tool in FREEHAND or QLineF(item.points[0], item.points[-1]).length() >= 2:
                 self.doc.add(item)
             return
         super().mouseReleaseEvent(event)
+
+    def constrain(self, point, modifiers):
+        if self.origin is None or not modifiers & Qt.KeyboardModifier.ShiftModifier:
+            return point
+        delta = point - self.origin
+        if self.tool in SHAPES:
+            size = max(abs(delta.x()), abs(delta.y()))
+            point = self.origin + QPointF(size if delta.x() >= 0 else -size, size if delta.y() >= 0 else -size)
+        elif self.tool in ('line', 'arrow'):
+            import math
+            angle = round(math.atan2(delta.y(), delta.x()) / (math.pi / 4)) * math.pi / 4
+            distance = QLineF(self.origin, point).length()
+            point = self.origin + QPointF(math.cos(angle) * distance, math.sin(angle) * distance)
+        return QPointF(max(0, min(self.doc.base.width(), point.x())), max(0, min(self.doc.base.height(), point.y())))
+
+    def erase_at(self, point):
+        for item in self.scene().items(point):
+            if isinstance(item, AnnotationItem) and item.index >= 0:
+                self.doc.remove(item.index, checkpoint=not self.erased)
+                self.erased = True
+                break
 
 
 TOOLS = [
     ("select", "Select", "V", "Select and move annotations; double-click a text label to edit"),
     ("pan", "Pan", "H", "Drag to pan; the middle mouse button also pans"),
     ("pen", "Pen", "P", "Draw freehand on the image"),
+    ("brush", "Brush", "G", "Paint a broad freehand stroke; adjust size, opacity and smoothing"),
     ("highlight", "Highlight", "I", "Mark an area with translucent colour"),
+    ("line", "Line", "L", "Draw a straight line; hold Shift for 45-degree angles"),
     ("arrow", "Arrow", "A", "Drag from the tail to the tip of an arrow"),
     ("rect", "Box", "B", "Draw an outlined rectangle"),
+    ("round_rect", "Rounded", "U", "Draw a rounded box; hold Shift for equal sides"),
     ("filled", "Fill", "F", "Draw a filled rectangle"),
     ("ellipse", "Ellipse", "O", "Draw an outlined ellipse"),
     ("text", "Text", "T", "Click the image to add an editable text label"),
     ("number", "Step", "N", "Click to place the next numbered marker"),
+    ("eraser", "Eraser", "E", "Erase whole annotations; leaves source pixels unchanged; drag erases in one undo step"),
     ("redact", "Redact", "R", "Draw an opaque black block over sensitive information"),
     ("crop", "Crop", "C", "Drag to crop; undo restores the image and editable objects"),
 ]
 
 
 class Editor(QWidget):
+    preferences_changed = Signal(object)
     copy_requested = Signal()
     save_requested = Signal()
     quicksave_requested = Signal()
@@ -280,7 +356,7 @@ class Editor(QWidget):
         rail_layout = QVBoxLayout(self.rail)
         rail_layout.setContentsMargins(8, 12, 8, 12)
         rail_layout.setSpacing(6)
-        for title, group in [('NAVIGATE', TOOLS[:2]), ('ANNOTATE', TOOLS[2:10]), ('FINISH', TOOLS[10:])]:
+        for title, group in [('NAVIGATE', TOOLS[:2]), ('DRAW & MARK', [entry for entry in TOOLS if entry[0] in DRAWING_TOOLS]), ('FINISH', [entry for entry in TOOLS if entry[0] in ('eraser', 'redact', 'crop')])]:
             heading = QLabel(title)
             heading.setObjectName('railHeading')
             rail_layout.addWidget(heading)
@@ -319,14 +395,19 @@ class Editor(QWidget):
         self.tool_name.setObjectName('toolName')
         controls.addWidget(self.tool_name)
         self.colour_button = tool_button('pen', 'Colour', self.choose_colour)
+        self.colour_palette = ColourPalette(self)
+        self.colour_palette.chosen.connect(lambda color: self.change_property('color', color))
         controls.addWidget(self.colour_button)
-        self.width_label = QLabel('Stroke')
+        self.width_label = QLabel('Size')
         controls.addWidget(self.width_label)
         self.width_control = QSpinBox()
-        self.width_control.setRange(1, 40)
+        self.width_control.setRange(1, 80)
         self.width_control.setValue(4)
         self.width_control.setSuffix(' px')
-        self.width_control.setFixedWidth(82)
+        self.width_control.setMinimumWidth(max(104, self.width_control.fontMetrics().horizontalAdvance('80 px') + 58))
+        self.width_control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.width_control.setKeyboardTracking(False)
+        self.width_control.setAccessibleName('Drawing size in pixels')
         self.width_control.valueChanged.connect(lambda n: self.change_size('stroke_width', 'width', n))
         controls.addWidget(self.width_control)
         self.size_label = QLabel('Text')
@@ -335,9 +416,16 @@ class Editor(QWidget):
         self.size_control.setRange(8, 160)
         self.size_control.setValue(24)
         self.size_control.setSuffix(' px')
-        self.size_control.setFixedWidth(86)
+        self.size_control.setMinimumWidth(max(110, self.size_control.fontMetrics().horizontalAdvance('160 px') + 58))
+        self.size_control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.size_control.setKeyboardTracking(False)
         self.size_control.valueChanged.connect(lambda n: self.change_size('font_size', 'font_size', n))
         controls.addWidget(self.size_control)
+        self.style_button = tool_button('styles', 'Style', self.choose_style)
+        controls.addWidget(self.style_button)
+        self.style_popup = StylePopup(self)
+        self.style_popup.changed.connect(self.change_property)
+        self.style_popup.reset_requested.connect(self.reset_style)
         self.tool_hint = QLabel()
         self.tool_hint.setObjectName('muted')
         self.tool_hint.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
@@ -460,9 +548,10 @@ class Editor(QWidget):
         self.tool_name.setText(names.get(kind, 'OCR area'))
         self.tool_hint.setText(hints.get(kind, 'Drag around the text you want to extract'))
         self.tool_hint.setToolTip(self.tool_hint.text())
-        self.colour_button.setVisible(kind in ('pen', 'highlight', 'arrow', 'rect', 'filled', 'ellipse', 'text', 'number'))
+        self.colour_button.setVisible(kind in DRAWING_TOOLS)
+        self.style_button.setVisible(kind in DRAWING_TOOLS)
         for widget in (self.width_label, self.width_control):
-            widget.setVisible(kind in ('pen', 'highlight', 'arrow', 'rect', 'ellipse'))
+            widget.setVisible(kind in STROKED)
         for widget in (self.size_label, self.size_control):
             widget.setVisible(kind == 'text')
         self.delete_button.setEnabled(selected is not None)
@@ -471,7 +560,9 @@ class Editor(QWidget):
             widget.blockSignals(True)
             widget.setValue(value)
             widget.blockSignals(False)
-        self.colour_button.setIcon(icon('pen', selected.color if selected else self.canvas.color))
+        self.colour_button.setIcon(swatch_icon(selected.color if selected else self.canvas.color))
+        if self.style_popup.isVisible() and kind in DRAWING_TOOLS:
+            self.style_popup.sync(selected or self.canvas.annotation(kind, []), names.get(kind, kind))
 
     def toggle_focus(self):
         self.focus_mode = not self.focus_mode
@@ -497,23 +588,57 @@ class Editor(QWidget):
         self.select_button.setChecked(True)
 
     def choose_colour(self):
-        color = QColorDialog.getColor(QColor(self.canvas.color), self, "Annotation colour")
-        if color.isValid():
-            self.canvas.color = color.name()
-            self.colour_button.setIcon(icon('pen', color.name()))
-            index = self.canvas.selected_index()
-            if index is not None:
-                item = deepcopy(self.canvas.doc.annotations[index])
-                item.color = color.name()
-                self.canvas.doc.replace(index, item)
+        item = self.active_annotation()
+        self.colour_palette.display(item.color, self.colour_button)
+
+    def active_annotation(self):
+        index = self.canvas.selected_index()
+        if self.canvas.tool == 'select' and self.canvas.doc and index is not None:
+            return self.canvas.doc.annotations[index]
+        return self.canvas.annotation(self.canvas.tool, [])
+
+    def choose_style(self):
+        item = self.active_annotation()
+        name = dict((entry[0], entry[1]) for entry in TOOLS).get(item.kind, item.kind)
+        self.style_popup.display(item, name, self.style_button)
+
+    def change_property(self, key, value):
+        item = self.active_annotation()
+        if item.kind not in DRAWING_TOOLS:
+            return
+        if getattr(item, key) == value:
+            return
+        index = self.canvas.selected_index()
+        if self.canvas.tool == 'select' and self.canvas.doc and index is not None:
+            updated = deepcopy(item); setattr(updated, key, value)
+            self.canvas.doc.replace(index, updated)
+        else:
+            setattr(self.canvas, 'stroke_width' if key == 'width' else key, value)
+            self.canvas.preferences[self.canvas.tool] = self.canvas.current_preferences()
+            self.preferences_changed.emit(deepcopy(self.canvas.preferences))
+        self.update_properties()
+
+    def reset_style(self):
+        item = self.active_annotation()
+        if item.kind not in DRAWING_TOOLS:
+            return
+        values = defaults(item.kind)
+        index = self.canvas.selected_index()
+        if self.canvas.tool == 'select' and index is not None:
+            updated = deepcopy(item)
+            for key, value in values.items(): setattr(updated, key, value)
+            self.canvas.doc.replace(index, updated)
+        else:
+            for key, value in values.items(): setattr(self.canvas, 'stroke_width' if key == 'width' else key, value)
+            self.canvas.preferences[item.kind] = values
+            self.preferences_changed.emit(deepcopy(self.canvas.preferences))
+        self.update_properties()
+
+    def load_preferences(self, value):
+        self.canvas.preferences = validated_preferences(value)
 
     def change_size(self, canvas_property, annotation_property, value):
-        setattr(self.canvas, canvas_property, value)
-        index = self.canvas.selected_index()
-        if index is not None:
-            item = deepcopy(self.canvas.doc.annotations[index])
-            setattr(item, annotation_property, value)
-            self.canvas.doc.replace(index, item)
+        self.change_property(annotation_property, value)
 
     def set_document(self, doc):
         if self.canvas.doc:

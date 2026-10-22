@@ -1,17 +1,21 @@
 {
   "schema": 1,
-  "version": "2.1.0",
-  "updater_url": "https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/v2.1.0/delivery/Update-BeastSnip-2.1.0.ps1",
-  "updater_sha256": "a6639ab3bc760444d3f6c9791d228b887a1868917b99311b6743e911136017ac",
+  "version": "2.1.1",
+  "updater_url": "https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/v2.1.1/delivery/Update-BeastSnip-2.1.1.ps1",
+  "updater_sha256": "ac30df898db7781af1d26eb14f36a49d35708d561e73cc4cddb81aba30f791d6",
   "notes": [
-    "Added Quick Capture: save several snips without replacing the current editor session, with a small non-activating Open / Copy / Pin preview and retry for failed saves.",
-    "Added editable .beastsnip projects and automatic private session recovery, including original pixels, annotations, extracted text and up to ten undo and ten redo states. Recovery can be disabled and cleared in Preferences.",
-    "Added an Update Centre with explicit release checks, readable release notes, SHA256-verified updater downloads, installation progress and update-log access.",
-    "Rebuilt installation around a separately tested candidate and Python runtime. Failed activation checks restore the previous application, runtime selection, settings and desktop shortcut; an interrupted activation is repaired on the next update attempt.",
-    "Added Screenshots favourites, date filters, multi-select, rename, bulk PNG export, reversible deletion and Load More for larger libraries. Saved History and all existing tools remain available.",
-    "Added a frozen-pixel magnifier beside the selection cursor, with physical coordinates and an M toggle.",
-    "Added vertical scrolling capture with automatic scrolling, manual Add Frame, overlap validation, pause, Finish and Cancel. Uncertain alignment stops automatic scrolling and preserves the valid captured portion.",
-    "Refined the compact capture header, library selection controls, recovery/save notices, action search and scrollable Preferences while preserving the readable OCR sidebar and expanded reader.",
-    "Shipped the complete update as one self-contained PowerShell script, including dependencies, OCR repair, tests, rollback handling, icon and desktop-shortcut refresh. Existing screenshot folders, OCR preferences and history are retained."
+    "A searchable, offline Version History covering every release from 1.0.0 onward, with separate version/date entries, grouped changes, an All Releases view and Copy Notes.",
+    "Brush, straight Line, Rounded Box and an annotation Eraser. Dragging the eraser removes whole annotations in a single undo step while retaining the original image.",
+    "A colour palette with named hex values, a custom hex field and an advanced colour picker.",
+    "A drawing-style panel with a live stroke preview, opacity, solid/dashed/dotted lines, round/square stroke ends, solid/soft shape fills, arrowheads at one or both ends, and freehand smoothing.",
+    "Per-tool drawing preferences that survive tool changes and restarts. Hold Shift for equal-sided shapes or 45-degree lines/arrows.",
+    "A cleaner drawing bar with a real colour swatch, readable pixel-size controls, contextual Style options and transparent labels.",
+    "Editable projects and recovery now preserve all new tools/styles. Existing 2.1 projects open with their original appearance; newly saved projects use format 2 so older apps cannot silently discard styles.",
+    "Selected annotations stay selected while changing colour, size or style. Changing them remains undoable and updates the existing auto-saved PNG.",
+    "Version History is available from the BeastSnip menu, Update Centre and Ctrl+K action search.",
+    "Replaced the skewed settings icon with a centred, symmetric gear that fits its icon viewport.",
+    "Assigned BeastSnip a stable Windows application identity and global application icon. The desktop shortcut now carries matching taskbar identity, icon and relaunch properties rather than grouping with Python.",
+    "Removed fixed, undersized pixel fields that could clip the unit to “p”; drawing controls size themselves from font metrics.",
+    "Pen strokes include the final pointer position on release. Smoothed strokes, precise hit testing and the annotation eraser remain compatible with undo, PNG saving, OCR and project recovery."
   ]
 }

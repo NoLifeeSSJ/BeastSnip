@@ -15,7 +15,7 @@ from .document import Annotation, Document, encode_image
 
 MAX_BYTES = 256 * 1024 * 1024
 MAX_PIXELS = 60_000_000
-KINDS = {'pen', 'highlight', 'arrow', 'rect', 'filled', 'ellipse', 'text', 'number', 'redact'}
+KINDS = {'pen', 'brush', 'highlight', 'line', 'arrow', 'rect', 'round_rect', 'filled', 'ellipse', 'text', 'number', 'redact'}
 
 
 def project_snapshot(doc, png_path=''):
@@ -30,7 +30,9 @@ def project_snapshot(doc, png_path=''):
 def annotation_data(item):
     return dict(kind=item.kind, points=[[p.x(), p.y()] for p in item.points], color=item.color,
                 width=item.width, text=item.text, font_size=item.font_size, number=item.number,
-                offset=[item.offset.x(), item.offset.y()])
+                offset=[item.offset.x(), item.offset.y()], opacity=item.opacity,
+                line_style=item.line_style, cap=item.cap, fill_style=item.fill_style,
+                arrow_heads=item.arrow_heads, smooth=item.smooth)
 
 
 def encode_project(snapshot):
@@ -57,7 +59,7 @@ def encode_project(snapshot):
                 images[key] = name
             return dict(image=images[key], annotations=[annotation_data(a) for a in annotations],
                         revision=revision, ocr=text)
-        manifest = {'format': 'BeastSnip project', 'schema': 1,
+        manifest = {'format': 'BeastSnip project', 'schema': 2,
                     'current': state_data(snapshot['current']),
                     'undo': [state_data(s) for s in snapshot['undo']],
                     'redo': [state_data(s) for s in snapshot['redo']],
@@ -96,7 +98,7 @@ def load_project(path):
         if archive.getinfo('project.json').file_size > 8 * 1024 * 1024:
             raise ValueError('The project description is too large.')
         manifest = json.loads(archive.read('project.json'))
-        if manifest.get('format') != 'BeastSnip project' or manifest.get('schema') != 1:
+        if manifest.get('format') != 'BeastSnip project' or manifest.get('schema') not in (1, 2):
             raise ValueError('This project format is not supported.')
         images, total_pixels = {}, 0
         def point(values):
@@ -124,12 +126,18 @@ def load_project(path):
             for item in state['annotations']:
                 if item['kind'] not in KINDS or not 1 <= len(item['points']) <= 200000:
                     raise ValueError('The project contains an unsupported annotation.')
-                if not 1 <= item['width'] <= 80 or not 8 <= item['font_size'] <= 160 or len(item['text']) > 200000:
+                if type(item['width']) is not int or type(item['font_size']) is not int or not 1 <= item['width'] <= 80 or not 8 <= item['font_size'] <= 160 or len(item['text']) > 200000:
                     raise ValueError('The project contains invalid annotation settings.')
                 if not isinstance(item['text'], str) or not isinstance(item['color'], str) or not QColor(item['color']).isValid() or not isinstance(item['number'], int) or not 1 <= item['number'] <= 1_000_000_000:
                     raise ValueError('The project contains invalid annotation text, colour or numbering.')
+                styles = {key: item.get(key, default) for key, default in dict(opacity=100, line_style='solid', cap='round', fill_style='none', arrow_heads='end', smooth=False).items()}
+                if type(styles['opacity']) is not int or not 5 <= styles['opacity'] <= 100 or type(styles['smooth']) is not bool:
+                    raise ValueError('The project contains invalid drawing opacity or smoothing.')
+                for key, choices in [('line_style', ('solid', 'dash', 'dot')), ('cap', ('round', 'square')), ('fill_style', ('none', 'solid', 'soft')), ('arrow_heads', ('end', 'both', 'none'))]:
+                    if styles[key] not in choices:
+                        raise ValueError('The project contains an unsupported drawing style.')
                 annotations.append(Annotation(item['kind'], [point(p) for p in item['points']],
-                    item['color'], item['width'], item['text'], item['font_size'], item['number'], point(item['offset'])))
+                    item['color'], item['width'], item['text'], item['font_size'], item['number'], point(item['offset']), **styles))
             if not isinstance(state['ocr'], str) or len(state['ocr']) > 2_000_000 or not isinstance(state['revision'], int) or state['revision'] < 0:
                 raise ValueError('The project contains invalid text or revision data.')
             return QImage(images[name]), annotations, state['revision'], state['ocr']

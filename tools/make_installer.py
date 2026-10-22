@@ -6,11 +6,13 @@ import json
 from pathlib import Path
 import re
 import zipfile
+from make_history import build_history
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / 'beastsnip/__init__.py').read_text()).group(1)
 OUT = ROOT / "delivery"
 OUT.mkdir(exist_ok=True)
+build_history()
 FILES = [
     "Install.ps1", "Update.ps1", "Repair-OCR.ps1", "Launch.ps1", "Launch.cmd", "Build.ps1", "README.md", "VERIFICATION.md", "CHANGELOG.md",
     "requirements.txt", "requirements-build.txt", "run_beastsnip.py", ".gitignore", ".gitattributes",

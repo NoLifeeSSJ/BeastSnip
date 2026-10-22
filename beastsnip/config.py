@@ -32,6 +32,7 @@ class Settings:
     defaults = {
         "delay": 0, "hotkey": "Ctrl+Alt+S", "auto_copy": False,
         "quick_capture": False, "recover_session": True, "magnifier": True,
+        "drawing_preferences": {},
         "auto_history": False, "auto_save": True, "screenshots_dir": r"C:\SnipsV1\Screenshots" if os.name == "nt" and not os.environ.get("BEASTSNIP_DATA_DIR") else "", "close_to_tray": True, "close_explained": False,
         "save_dir": str(Path.home() / "Pictures" / "BeastSnip"),
         "history_dir": "", "jpeg_quality": 92, "ocr_path": "", "ocr_language": "eng", "ocr_data_dir": "",

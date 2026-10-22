@@ -117,6 +117,7 @@ class MainWindow(WorkspaceWorkflows, QMainWindow):
         brand_menu.addAction(icon('recovery'), 'Restore Last Session', self.restore_recovery)
         brand_menu.addAction('Clear Automatic Recovery Data…', lambda: self.clear_recovery())
         brand_menu.addAction(icon('updates'), 'Update Centre', self.show_update_centre)
+        brand_menu.addAction(icon('history'), 'Version History · all updates', self.show_changelog)
         brand_menu.addAction('About BeastSnip', self.show_about)
         brand_menu.addSeparator()
         brand_menu.addAction('Quit BeastSnip', self.quit_app)
@@ -266,6 +267,8 @@ class MainWindow(WorkspaceWorkflows, QMainWindow):
         home_layout.addWidget(self.library_tabs, 1)
         self.stack.addWidget(self.home)
         self.editor = Editor()
+        self.editor.load_preferences(self.settings['drawing_preferences'])
+        self.editor.preferences_changed.connect(self.save_drawing_preferences)
         self.editor.copy_requested.connect(self.copy_image)
         self.editor.save_requested.connect(self.export_image)
         self.editor.quicksave_requested.connect(self.quick_save)
@@ -325,6 +328,20 @@ class MainWindow(WorkspaceWorkflows, QMainWindow):
     def error(self, message):
         logging.error("Operation failed; see on-screen message")
         QMessageBox.warning(self, "BeastSnip", str(message))
+
+    def save_drawing_preferences(self, values):
+        self.settings.values['drawing_preferences'] = values
+        try:
+            self.settings.save()
+        except OSError:
+            self.statusBar().showMessage('The drawing style is active, but could not be saved for next time.', 8000)
+
+    def show_changelog(self):
+        from .release_history import ReleaseHistory
+        dialog = getattr(self, 'history_dialog', None)
+        if dialog is None:
+            self.history_dialog = dialog = ReleaseHistory(self)
+        dialog.show(); dialog.raise_(); dialog.activateWindow()
 
     def task(self, function, callback):
         task = Task(function)
@@ -636,6 +653,7 @@ class MainWindow(WorkspaceWorkflows, QMainWindow):
             ('Save Editable Project · Ctrl+Shift+P', self.save_editable_project, has_doc),
             ('Restore last editable session', self.restore_recovery, always),
             ('Update Centre · releases and rollback', self.show_update_centre, always),
+            ('Version History · changelog for every update', self.show_changelog, always),
             ('Open an image · Ctrl+O', self.open_image, always),
             ('Paste image from clipboard · Ctrl+V', self.paste_image, always),
             ('Open screenshot library', self.show_gallery, always),
@@ -680,7 +698,10 @@ class MainWindow(WorkspaceWorkflows, QMainWindow):
             'Ctrl+S  Save to Screenshots\nCtrl+Shift+P  Save Editable Project\nCtrl+Shift+S  Save As…\nCtrl+C  Copy image (or selected OCR text)\n'
             'Ctrl+Z / Ctrl+Y  Undo / Redo\nCtrl+Shift+F  Focus workspace\nF5  Refresh library\n\n'
             'TOOLS\nV Select · H Pan · P Pen · I Highlight · A Arrow\nB Box · F Fill · O Ellipse · T Text · N Step\n'
-            'R Redact · C Crop · Esc Select\n\nCtrl+wheel to zoom · Middle mouse to pan\nDouble-click a text annotation to edit it.')
+            'G Brush · L Line · U Rounded Box · E Annotation Eraser\n'
+            'R Redact · C Crop · Esc Select\n\nShift: equal-sided shapes / 45-degree lines\n'
+            'Colour: palette and hex values · Style: opacity, pattern, fill and smoothing\n'
+            'Ctrl+wheel to zoom · Middle mouse to pan\nDouble-click a text annotation to edit it.')
 
     def show_about(self):
         QMessageBox.about(self, 'About BeastSnip', f'BeastSnip {__version__}\nCapture. Clarify. Keep.\n\nNative Windows screenshots, annotations and offline OCR.\nYour images stay on your computer.\n\nNew captures: ' + self.settings['screenshots_dir'])
@@ -699,6 +720,8 @@ class MainWindow(WorkspaceWorkflows, QMainWindow):
             self.error(error)
             return
         self.integration.track_foreground()
+        self.editor.colour_palette.hide()
+        self.editor.style_popup.hide()
         self.capture_mode = mode
         self.capture_quick = self.settings["quick_capture"]
         self.capture_hwnd = self.integration.last_external
@@ -1145,14 +1168,22 @@ def main():
     parser.add_argument("--smoke-test", action="store_true", help="Start the real UI briefly without tray or hotkey registration")
     args = parser.parse_args()
     windows.enable_dpi_awareness()
+    identity_failed = False
+    try:
+        windows.set_app_identity()
+    except OSError:
+        identity_failed = True
     app = QApplication(sys.argv)
     app.setApplicationName("BeastSnip")
     app.setOrganizationName("BeastSnip")
+    app.setWindowIcon(QIcon(str(resource('beastsnip.ico'))))
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(STYLE)
     data_dir().mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(data_dir() / "beastsnip.log", maxBytes=1_000_000, backupCount=2, encoding="utf-8")
     logging.basicConfig(level=logging.INFO, handlers=[handler], format="%(asctime)s %(levelname)s %(message)s")
+    if identity_failed:
+        logging.warning('The Windows application identity could not be set.')
     def exception_handler(kind, value, trace):
         # Do not log exception messages/locals: they may contain screenshot text.
         logging.error("Unhandled UI exception (%s)", kind.__name__)
@@ -1164,6 +1195,8 @@ def main():
     sys.excepthook = exception_handler
     instance = SingleInstance(app) if not args.smoke_test else None
     try:
+        if args.smoke_test and identity_failed:
+            raise RuntimeError('Windows could not assign the BeastSnip taskbar identity.')
         if instance and not instance.acquire():
             return 0
         window = MainWindow(smoke=args.smoke_test)
@@ -1171,6 +1204,8 @@ def main():
             instance.activated.connect(window.bring_forward)
         window.show()
         if args.smoke_test:
+            if app.windowIcon().pixmap(32, 32).isNull() or window.windowIcon().pixmap(32, 32).isNull():
+                raise RuntimeError('The BeastSnip application icon could not be loaded.')
             # Exercise actual editing, flattening, UI construction and event loop.
             from PySide6.QtCore import QPointF, QRectF
             from .document import Annotation

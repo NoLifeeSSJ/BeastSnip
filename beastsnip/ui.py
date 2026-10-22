@@ -1,12 +1,28 @@
 """Small native UI building blocks and scalable, bundled line icons."""
 from PySide6.QtCore import QByteArray, QSize, Qt, QTimer
-from PySide6.QtGui import QIcon, QPainter, QPixmap
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QToolButton, QVBoxLayout)
 
 
+def gear_path():
+    import math
+    points = []
+    for tooth in range(8):
+        for angle, radius in [(-15, 7.7), (-9, 10), (9, 10), (15, 7.7)]:
+            radians = math.radians(tooth * 45 + angle)
+            points.append(f'{12 + radius * math.cos(radians):.3f},{12 + radius * math.sin(radians):.3f}')
+    return '<polygon points="' + ' '.join(points) + '"/><circle cx="12" cy="12" r="3.2"/>'
+
+
 PATHS = {
+    'brush': '<path d="m9 15 9-12 3 3-11 10M9 14c-4-2-6 2-5 4 0 2-2 3-2 3s8 2 9-3c0-2-1-3-2-4z"/>',
+    'line': '<path d="M4 20 20 4"/><circle cx="4" cy="20" r="1"/><circle cx="20" cy="4" r="1"/>',
+    'round_rect': '<rect x="3" y="5" width="18" height="14" rx="5"/>',
+    'eraser': '<path d="m3 14 10-11 8 8-9 10H9zM8 9l8 8M12 21h9"/>',
+    'styles': '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
+    'history': '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 12h8M8 17h5"/>',
     'star': '<path d="m12 3 3 6 6 1-4.5 4.5 1 6.5-5.5-3-5.5 3 1-6.5L3 10l6-1z"/>',
     'quick': '<path d="m13 2-9 12h7l-1 8 10-13h-7z"/>',
     'project': '<rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h6M7 11h6M21 7v14H7"/>',
@@ -39,12 +55,29 @@ PATHS = {
     'ocr': '<path d="M4 8V4h4M16 4h4v4M4 16v4h4M20 16v4h-4M8 8h8M12 8v8M9 16h6"/>',
     'more': '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
     'search': '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',
-    'settings': '<path d="m10 3-1 3-3 1-3-1-1 4 3 2v3l-2 2 3 3 3-2 3 1 1 3 4-1v-3l3-2 3 1 1-4-3-2v-3l2-2-3-3-3 2-3-1-1-3z"/><circle cx="12" cy="12" r="3"/>',
+    'settings': gear_path(),
     'focus': '<path d="M9 3H3v6M15 3h6v6M3 15v6h6M21 15v6h-6"/>',
     'check': '<path d="m5 12 4 4L20 5"/>',
     'help': '<circle cx="12" cy="12" r="9"/><path d="M9 8a3 3 0 1 1 5 3l-2 2M12 17h.01"/>',
     'paste': '<path d="M8 5H4v16h16V5h-4M8 3h8v5H8zM8 13h8M8 17h5"/>',
 }
+
+
+def swatch_icon(color):
+    result = QIcon()
+    for scale in (1, 2, 3):
+        pixmap = QPixmap(24 * scale, 24 * scale)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.scale(scale, scale)
+        painter.setPen(QColor('#949bb1'))
+        painter.setBrush(QColor(color))
+        painter.drawRoundedRect(2, 2, 20, 20, 5, 5)
+        painter.end()
+        pixmap.setDevicePixelRatio(scale)
+        result.addPixmap(pixmap)
+    return result
 
 
 def icon(name, color='#d9dbea'):

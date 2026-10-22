@@ -2,9 +2,22 @@
 
 A local Windows 11 screenshot application written in Python 3.12 and PySide6. Dark interface, purple accents, editable annotations, opaque redaction, private history, offline OCR and pinned screenshots. No account, paid API, browser wrapper or remote image processing.
 
-[Update v2.1.0](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.0.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
+[Update v2.1.1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.1.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
 
-![BeastSnip 2.1 editing workspace](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1-editor.png)
+![BeastSnip 2.1.1 drawing workspace](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1.1-drawing.png)
+
+## BeastSnip 2.1.1: drawing and clarity
+
+- **Version History:** BeastSnip menu → Version History, Update Centre → Version History, or Ctrl+K → Version History. Browse each release separately, search all notes, show all releases, or copy the displayed notes. The complete history is bundled locally and works without Internet access. [Read the Markdown changelog](CHANGELOG.md).
+- **Cleaner drawing controls:** Colour opens a compact palette with hex entry and an advanced picker. The swatch shows the actual colour. Pixel fields size themselves to keep “px” visible; labels blend into the drawing bar.
+- **More tools:** Brush (G), Line (L), Rounded Box (U), and annotation Eraser (E), alongside every original tool. Eraser removes complete annotations rather than image pixels; a drag is one undo step. Redactions remain fully opaque regardless of drawing opacity.
+- **More styles:** open Style for solid/dashed/dotted lines, round/square ends, opacity, smooth freehand strokes, shape fills and arrowheads at one or both ends. Options adapt to the tool, with a live preview. Shift constrains shapes to equal sides and lines/arrows to 45-degree angles.
+- **Styles stay with you:** each tool remembers its defaults across switches and restarts. Select an existing annotation to edit its properties; selection remains in place and each change supports Undo. PNG auto-save, recovery and editable projects retain the result.
+- **Icon fixes:** the settings gear is centred and symmetric. BeastSnip uses its own Windows application ID and global icon, and the refreshed desktop shortcut stores matching taskbar and relaunch properties. Restart through the refreshed shortcut. An old Python shortcut already pinned to your taskbar may need to be unpinned and replaced with the BeastSnip shortcut.
+
+New `.beastsnip` files use project format 2 to preserve new styles; 2.1.1 opens earlier format-1 projects without changing their drawing appearance. Older app versions reject format 2 instead of silently dropping styles. Keep a flattened PNG for sharing.
+
+![Version history, separated by release](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1.1-history.png)
 
 ## BeastSnip 2.1
 
@@ -42,19 +55,19 @@ The initial capture is written **before editing**. Edits replace its current PNG
 
 ![BeastSnip 2.1 screenshot library](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1-library.png)
 
-## Update an existing installation (2.1.0)
+## Update an existing installation (2.1.1)
 
-Save any open capture first. Download [Update-BeastSnip-2.1.0.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.0.ps1) to Downloads, then run:
+Save any open capture first. Download [Update-BeastSnip-2.1.1.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.1.ps1) to Downloads, then run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-BeastSnip-2.1.0.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-BeastSnip-2.1.1.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
 ```
 
-This single self-contained script updates the application to version 2.1.0, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
+This single self-contained script updates the application to version 2.1.1, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
 
 **`-CloseRunningApp` explicitly closes BeastSnip in the target installation, including when it is hidden in the tray. Unsaved in-memory captures/edits will be discarded, so save them first.** Other Python programs and other BeastSnip installations are not targeted. The updater rechecks process identity before stopping it. Without this switch it stops immediately with instructions if BeastSnip is running; it no longer waits silently for two minutes. You can instead use tray → Quit BeastSnip and omit the close switch.
 
-The script displays **eight stages** and prints **`UPDATE COMPLETE - BeastSnip 2.1.0`** only after the required checks pass. It prepares source and dependencies separately, runs the UI smoke check and tests, then closes the target installation and snapshots rollback data. OCR repair, native capture and folder checks run before application activation. Post-activation version/startup checks and shortcut refresh must also succeed. Generated package bytecode is cleared to prevent stale imports.
+The script displays **eight stages** and prints **`UPDATE COMPLETE - BeastSnip 2.1.1`** only after the required checks pass. It prepares source and dependencies separately, runs the UI smoke check and tests, then closes the target installation and snapshots rollback data. OCR repair, native capture and folder checks run before application activation. Post-activation version/startup checks and shortcut refresh must also succeed. Generated package bytecode is cleared to prevent stale imports.
 
 Each new Python environment is created at its permanent location under `C:\SnipV1\.beastsnip-runtimes`; it is never moved afterward. `runtime.json` selects the active environment. Existing `.venv` installations remain a supported fallback and are retained. If activation or final checks fail, the previous source, runtime pointer, settings and desktop shortcut are restored automatically; an optional relaunch opens the previous version. Failures before activation leave the live application files in place. Incomplete activation journals are repaired on the next updater run. Backups and old runtimes are retained under `.beastsnip-backups` and `.beastsnip-runtimes`; do not delete the active runtime.
 
@@ -126,14 +139,17 @@ The screenshot takes most of the window. Tool buttons have tooltips; the selecte
 | --- | --- |
 | Select | Select, drag or delete an annotation; double-click a text label to edit its text |
 | Pan | Drag the view; middle mouse also pans |
-| Pen / Highlight | Separate freehand objects, with an opaque pen or translucent highlighter |
+| Pen / Brush / Highlight | Freehand objects with smoothing, line patterns, stroke ends and opacity; Highlight uses translucent ink |
+| Line | Straight lines; Shift snaps to 45-degree angles |
+| Rounded Box | Rounded rectangle with outline, solid fill or soft fill |
+| Eraser | Erase whole annotations; dragging groups the deletion into one undo step, leaving source pixels intact |
 | Arrow / Box / Fill / Ellipse | Drag from one corner/end to another |
 | Text | Add a multiline label, with adjustable font size |
 | Step | Click to add the next numbered marker |
 | Redact | Draw a solid opaque black block |
 | Crop | Drag the kept area; crop flattens objects into pixels; Undo restores the editable objects |
 
-Colour, Stroke and Text px apply to new annotations and to the selected annotation when applicable. Change the controls before drawing, or select an object and change the controls. Export uses full image resolution, independently of zoom, scrolling and window size.
+Colour, Size, Text px and Style apply to new annotations and to the selected annotation when applicable. Change the controls before drawing, or select an object and change them. Style includes pattern, stroke ends, opacity, smoothing, fill and arrowheads where relevant; Reset This Tool restores its defaults. Export uses full image resolution, independently of zoom, scrolling and window size.
 
 Use Undo, Redo and Delete in the contextual bar, zoom/Fit/1:1 below the image, and the following shortcuts:
 
@@ -236,9 +252,10 @@ $beastPython = Get-BeastSnipPython -InstallDir (Get-Location).Path
 & $beastPython -m beastsnip --smoke-test
 & .\tests\test_updater.ps1
 & .\tests\test_transactions.ps1
+& .\tests\test_shell_identity.ps1
 ```
 
-Tesseract integration tests run only when `tesseract` is on PATH; other tests do not require OCR. `--smoke-test` starts the real UI, annotates, crops, undoes/redoes, checks rendered dimensions and exits. It does not register a hotkey, capture your desktop or prove Windows capture works. Use an isolated `BEASTSNIP_DATA_DIR` when testing. `tools/render_preview.py` renders the actual UI with generated sample images, real OCR and isolated temporary storage. `tools/make_icon.py` regenerates the ICO/PNG from the included original SVG; `tools/make_installer.py` regenerates the self-contained installer and source ZIP. See **VERIFICATION.md** for actual results and the outstanding Windows checklist.
+Tesseract integration tests run only when `tesseract` is on PATH; other tests do not require OCR. `--smoke-test` starts the real UI, annotates, crops, undoes/redoes, checks rendered dimensions and exits. It does not register a hotkey, capture your desktop or prove Windows capture works. Use an isolated `BEASTSNIP_DATA_DIR` when testing. `tools/render_preview.py` renders the actual UI with generated sample images, real OCR and isolated temporary storage. `tools/make_icon.py` regenerates the ICO/PNG from the included original SVG; `tools/make_history.py` generates the offline history from CHANGELOG.md; `tools/make_installer.py` refreshes that history and regenerates the self-contained installer and source ZIP. `tools/render_211_preview.py` renders the 2.1.1 drawing/colour/style/history previews. See **VERIFICATION.md** for actual results and the outstanding Windows checklist.
 
 For Linux/offscreen development (editing and automated tests only):
 
@@ -252,6 +269,7 @@ QT_QPA_PLATFORM=offscreen BEASTSNIP_DATA_DIR=/tmp/beastsnip-check .venv/bin/pyth
 ## Troubleshooting
 
 - **Auto-save failure:** the capture stays open and unsaved. Check the folder/drive, free space and permissions. Choose a writable Screenshots folder in Preferences, then Retry save. Save As can also export the current pixels. A failed PNG save never reports success.
+- **Python taskbar icon:** restart using the updated BeastSnip shortcut. Replace an old pinned Python shortcut by pinning BeastSnip; no Explorer restart or icon-cache deletion is needed.
 - **Find a relocated control:** press Ctrl+K, or open More / the New Snip arrow. All original tools and actions remain available.
 
 - **Shortcut does nothing:** run `Launch.ps1 -Console`; check the per-user log; rerun Install.ps1 if imports/dependencies are missing.

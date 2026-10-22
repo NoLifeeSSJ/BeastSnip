@@ -6,6 +6,7 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import zipfile
+from make_history import parse_changelog
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'delivery'
@@ -13,6 +14,9 @@ VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / 'beastsnip/__init__.py')
 
 
 def verify():
+    history = json.loads((ROOT / 'beastsnip/resources/changelog.json').read_text(encoding='utf-8'))
+    assert history['schema'] == 1 and history['releases'] == parse_changelog((ROOT / 'CHANGELOG.md').read_text(encoding='utf-8'))
+    assert history['releases'][0]['version'] == VERSION
     payload = (OUT / 'BeastSnip-source.zip').read_bytes()
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
         assert archive.testzip() is None, 'A source ZIP entry failed its CRC check'

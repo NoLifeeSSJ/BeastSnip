@@ -1,59 +1,143 @@
-# Changelog
+# BeastSnip version history
+
+Every published version is listed separately, newest first. This file is also the source for the offline **Version History** screen in the app. Images and OCR remain local.
+
+## 2.1.1 — 22 October 2026
+
+### Added
+
+- A searchable, offline Version History covering every release from 1.0.0 onward, with separate version/date entries, grouped changes, an All Releases view and Copy Notes.
+- Brush, straight Line, Rounded Box and an annotation Eraser. Dragging the eraser removes whole annotations in a single undo step while retaining the original image.
+- A colour palette with named hex values, a custom hex field and an advanced colour picker.
+- A drawing-style panel with a live stroke preview, opacity, solid/dashed/dotted lines, round/square stroke ends, solid/soft shape fills, arrowheads at one or both ends, and freehand smoothing.
+- Per-tool drawing preferences that survive tool changes and restarts. Hold Shift for equal-sided shapes or 45-degree lines/arrows.
+
+### Improved
+
+- A cleaner drawing bar with a real colour swatch, readable pixel-size controls, contextual Style options and transparent labels.
+- Editable projects and recovery now preserve all new tools/styles. Existing 2.1 projects open with their original appearance; newly saved projects use format 2 so older apps cannot silently discard styles.
+- Selected annotations stay selected while changing colour, size or style. Changing them remains undoable and updates the existing auto-saved PNG.
+- Version History is available from the BeastSnip menu, Update Centre and Ctrl+K action search.
+
+### Fixed
+
+- Replaced the skewed settings icon with a centred, symmetric gear that fits its icon viewport.
+- Assigned BeastSnip a stable Windows application identity and global application icon. The desktop shortcut now carries matching taskbar identity, icon and relaunch properties rather than grouping with Python.
+- Removed fixed, undersized pixel fields that could clip the unit to “p”; drawing controls size themselves from font metrics.
+- Pen strokes include the final pointer position on release. Smoothed strokes, precise hit testing and the annotation eraser remain compatible with undo, PNG saving, OCR and project recovery.
 
 ## 2.1.0 — 22 October 2026
 
-- Added Quick Capture: save several snips without replacing the current editor session, with a small non-activating Open / Copy / Pin preview and retry for failed saves.
-- Added editable .beastsnip projects and automatic private session recovery, including original pixels, annotations, extracted text and up to ten undo and ten redo states. Recovery can be disabled and cleared in Preferences.
-- Added an Update Centre with explicit release checks, readable release notes, SHA256-verified updater downloads, installation progress and update-log access.
-- Rebuilt installation around a separately tested candidate and Python runtime. Failed activation checks restore the previous application, runtime selection, settings and desktop shortcut; an interrupted activation is repaired on the next update attempt.
-- Added Screenshots favourites, date filters, multi-select, rename, bulk PNG export, reversible deletion and Load More for larger libraries. Saved History and all existing tools remain available.
-- Added a frozen-pixel magnifier beside the selection cursor, with physical coordinates and an M toggle.
-- Added vertical scrolling capture with automatic scrolling, manual Add Frame, overlap validation, pause, Finish and Cancel. Uncertain alignment stops automatic scrolling and preserves the valid captured portion.
-- Refined the compact capture header, library selection controls, recovery/save notices, action search and scrollable Preferences while preserving the readable OCR sidebar and expanded reader.
-- Shipped the complete update as one self-contained PowerShell script, including dependencies, OCR repair, tests, rollback handling, icon and desktop-shortcut refresh. Existing screenshot folders, OCR preferences and history are retained.
+### Capture and editing
+
+- Added Quick Capture: save several snips without replacing the current editor, with a small non-activating Open / Copy / Pin preview. Failed saves stay in memory with Retry.
+- Added editable `.beastsnip` projects and automatic private session recovery, including original pixels, annotations, extracted text and up to ten undo and ten redo states.
+- Added controls to disable and clear automatic recovery; explicit projects remain independent.
+- Added a frozen-pixel magnifier beside the selection cursor, physical coordinates, an M toggle and a Preferences default.
+- Added vertical scrolling capture with automatic scrolling, manual Add Frame, overlap validation, pause, Finish and Cancel. Uncertain alignment preserves the valid captured portion.
+
+### Library and interface
+
+- Added Screenshots favourites, date filters, Ctrl/Shift multi-select, rename, bulk PNG export and reversible deletion with Undo.
+- Added Load More for libraries with over 120 matches; thumbnails continue loading in the background.
+- Refined the compact capture header, selection controls, recovery/save notices, action search and scrollable Preferences.
+- Preserved Saved History, all existing editing tools, the readable OCR sidebar and expanded reader.
+
+### Updates and installation
+
+- Added an Update Centre with explicit release checks, readable release notes, SHA256-verified updater downloads, installation progress and log access.
+- Rebuilt installation around a separately tested candidate and Python runtime. Failed activation checks restore the previous application, runtime selection, settings and desktop shortcut.
+- Added persisted activation journals so the next updater attempt can repair an interrupted activation.
+- Shipped one self-contained PowerShell updater covering dependencies, OCR repair, tests, rollback, icon and shortcut refresh. Existing folders, history and OCR preferences are retained.
 
 ## 2.0.1 — 21 October 2026
 
-- Fixed an installer self-test that rejected a readable 396-pixel OCR text viewport on Windows because it assumed a 400-pixel minimum from the cloud environment.
-- Replaced fixed sidebar viewport pixel thresholds with readable-line, usable-width and proportional-space checks based on the actual font metrics and layout.
-- Added a regression test that accepts the reported 396-pixel viewport and rejects the old squashed 140-pixel presentation.
-- Captured the deliberately triggered autosave failure log inside its test, so expected failure/retry coverage does not print a misleading error during a successful install.
-- Shipped a versioned 2.0.1 updater that runs the full required checks and can finish an installation stopped by 2.0.0. The 2.0 workspace, OCR, autosave, history and existing preferences are retained.
+### Fixed
+
+- Fixed a Windows installer self-test that rejected a readable 396-pixel OCR viewport because it assumed a minimum of 400 pixels.
+- Replaced fixed viewport thresholds with readable-line, usable-width and proportional-space checks based on actual font metrics.
+- Added regression coverage that accepts the reported Windows layout and rejects the old squashed 140-pixel text box.
+- Captured the deliberately triggered autosave failure log inside its test, preventing misleading error output during successful installation.
+
+### Installation
+
+- Shipped a versioned updater to finish an installation stopped by 2.0.0, retaining required tests, OCR checks, native validation, folder setup and shortcut refresh.
+- Preserved the 2.0 workspace, OCR, auto-save, history and existing preferences.
 
 ## 2.0.0 — 21 October 2026
 
-- Redesigned the native workspace around a compact header, a grouped icon tool rail, contextual editing controls, and focused copy/save actions. All twelve annotation/navigation tools remain available.
-- Integrated the BeastSnip icon and wordmark into an app navigation menu, with Library / Editor navigation that keeps the current session intact.
-- Grouped region, active-window, monitor and delayed capture in the New Snip split button. Tray capture and the global shortcut are retained.
-- Added automatic PNG saving for new captures and pasted images in `C:\SnipsV1\Screenshots`. The existing installation remains at `C:\SnipV1`.
-- Edits, crops, redactions, undo and redo update the same PNG with debounced, atomic, serial background writes. Older writes cannot finish after a newer edit and replace it. Save completion does not interrupt drawing.
-- Added a persistent save status, failure banner and retry action. Failed saves keep the session unsaved. PNG auto-save does not store OCR text; Saved History still stores text explicitly.
-- Added a Screenshots library with background thumbnail loading, filename search, open/copy actions, folder access and refresh, alongside the existing searchable Saved History.
-- Added paste from clipboard, quick save, an action search (Ctrl+K), tool shortcuts, a keyboard guide (F1), and Focus mode (Ctrl+Shift+F).
-- Grouped Preferences into Captures & storage, Workspace, and Offline OCR. Added auto-save controls and folder selection; preserved existing settings, languages, history, and the working OCR engine.
-- Kept the resizable OCR sidebar, expanded reader, text size and wrapping controls. The helper text adapts to short windows.
-- Added a one-time, backed-up settings migration with a real folder write check. Later custom folder choices and an explicit auto-save-off preference survive subsequent updates.
-- Shipped a self-contained 2.0.0 PowerShell updater, matching source ZIP, checksums, tests, and reproducible UI previews.
+### Workspace redesign
+
+- Replaced the crowded horizontal controls with a compact header, grouped icon tool rail, contextual editing controls and focused copy/save actions. All twelve original tools remained available.
+- Integrated the BeastSnip icon and wordmark into an app navigation menu. Library / Editor navigation keeps the current session intact.
+- Grouped region, active-window, monitor and delayed capture in the New Snip split button; retained tray capture and the global shortcut.
+- Added paste from clipboard, quick save, Ctrl+K action search, tool shortcuts, an F1 keyboard guide and Ctrl+Shift+F Focus mode.
+- Grouped Preferences into Captures & storage, Workspace and Offline OCR; retained the resizable OCR sidebar, expanded reader, text size and wrapping.
+
+### Automatic saving and library
+
+- Added automatic PNG saving for captures and pasted images in `C:\SnipsV1\Screenshots`, with the application still installed at `C:\SnipV1`.
+- Edits, crops, redactions, undo and redo update the same PNG through debounced, atomic, serial background writes.
+- Prevented older saves from replacing newer edits; save completion no longer rebuilds the canvas or interrupts drawing.
+- Added persistent pending/saved/failed status, a failure banner and retry. Failed saves keep the session unsaved.
+- Added the Screenshots library with background thumbnails, filename search, open/copy, refresh and folder access, alongside the existing Saved History.
+- Kept OCR text separate from PNG auto-save; Save to History explicitly stores searchable extracted text.
+
+### Installation
+
+- Added a backed-up settings migration and real folder write check. Later custom folders and an explicit auto-save-off preference survive updates.
+- Preserved existing settings, languages, history and the working OCR runtime.
+- Shipped a self-contained PowerShell updater, matching source ZIP, checksums, tests and reproducible UI previews.
 
 ## 1.0.3 — 21 October 2026
 
-- OCR results open in a full-height sidebar instead of a shallow box below the image.
-- Drag the purple divider to resize the text area; its width is kept when extracting again or reopening the panel in the same session.
-- Expand Text opens a large, resizable, maximisable reader. Edits and reading controls stay in sync with the sidebar.
-- Adjust text size from 10 to 24 pt and enable/disable line wrapping. Long paths wrap without clipping by default.
-- Copy Text and keyboard editing work in both views. Redacting or changing the image clears stale OCR from both views.
-- The PowerShell updater installs 1.0.3 while preserving history, preferences and the existing working OCR runtime.
+### OCR reading experience
+
+- Moved OCR results from a shallow box beneath the image to a full-height sidebar.
+- Added a draggable divider; the chosen panel width survives re-extraction and reopening within the session.
+- Added Expand Text: a large, resizable, maximisable reader with edits and reading controls shared with the sidebar.
+- Added 10–24 pt text size and line wrapping; long paths wrap without clipping by default.
+- Preserved Copy Text and keyboard editing in both views. Redacting or changing the image clears stale OCR in both views.
+
+### Installation
+
+- Shipped a single PowerShell updater preserving history, preferences and the working OCR runtime.
 
 ## 1.0.2 — 21 October 2026
 
-- Added explicit targeted app closure, visible update stages, transcript logs and installed-version verification.
-- Cleared stale generated bytecode to ensure updated source loads.
+### Update reliability
+
+- Added explicit, targeted closure of the BeastSnip installation being updated. Unrelated Python processes and other installations are left alone.
+- Replaced the silent two-minute wait with immediate instructions when closure has not been requested.
+- Added visible update stages, transcript logs and installed-version verification. Failed checks report failure and do not claim completion.
+- Cleared generated application bytecode to prevent old source from loading after an update.
+- Refreshed application files, dependencies, desktop shortcut and icon through the standalone repair/update script.
 
 ## 1.0.1 — 21 October 2026
 
-- Fixed friendly monitor names being compared with native Windows display IDs.
-- Added OCR runtime discovery, language setup and local recognition checks.
+### Capture fixes
+
+- Separated monitor-friendly names from native Windows display IDs, fixing the connected-monitor “disconnected” error.
+- Matched region overlays to displays through native names or unique position/DPI geometry instead of list order; retained negative coordinates and mixed scaling.
+- Refreshed the monitor picker when the display layout changes and asked the user to retry.
+
+### OCR repair
+
+- Added Tesseract discovery through PATH, per-user folders, Program Files, registry metadata and configured paths.
+- Added runtime installation/repair, language-file setup and actionable errors for missing OCR dependencies.
+- Added verified app-managed English language data, explicit tessdata configuration and local recognition/opaque-image checks.
+- Preserved unrelated preferences and backed up settings before changing verified OCR paths.
 
 ## 1.0.0 — 21 October 2026
 
-- Initial screenshot application, annotation editor, local history, offline OCR, pinning, tray integration and Windows setup scripts.
+### Initial release
+
+- Native Windows region, active-window and monitor screenshots, capture delays, global shortcut and tray controls.
+- Select, Pan, Pen, Highlight, Arrow, Box, Fill, Ellipse, Text, numbered Step, opaque Redact and Crop tools.
+- Editable annotations, movement/deletion, undo/redo, zoom, Fit and physical-pixel 1:1 viewing.
+- Flattened clipboard images and PNG/JPEG exports; image opening and drag-and-drop support.
+- Local Tesseract OCR for whole images or selected areas, editable results, Copy Text and worker-based processing.
+- Private searchable Saved History with titles, tags, saved OCR, rename, deletion and folder access.
+- Always-on-top pinned screenshots with drag, resize, opacity and close controls.
+- Per-user preferences, local logs, single-instance activation and configurable close-to-tray behaviour.
+- Windows PowerShell setup/launch/build scripts, dependencies, original BeastSnip icon and desktop shortcut.

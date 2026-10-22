@@ -10,6 +10,20 @@ from PySide6.QtGui import QImage
 
 
 IS_WINDOWS = os.name == "nt"
+APP_USER_MODEL_ID = 'NoLifeeSSJ.BeastSnip.Desktop'
+
+
+def set_app_identity():
+    """Call before QApplication/windows, so Windows does not group us as Python."""
+    if not IS_WINDOWS:
+        return False
+    shell = ctypes.WinDLL('shell32')
+    function = shell.SetCurrentProcessExplicitAppUserModelID
+    function.argtypes, function.restype = [ctypes.c_wchar_p], ctypes.c_int32
+    result = function(APP_USER_MODEL_ID)
+    if result < 0:
+        raise OSError(f'Windows application identity failed (HRESULT {result:#x}).')
+    return True
 
 
 def enable_dpi_awareness():

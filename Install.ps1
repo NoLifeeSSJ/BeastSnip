@@ -8,7 +8,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'BeastSnip installation requires Windows 11.' }
-$expectedVersion = '2.1.0'
+$expectedVersion = '2.1.1'
 
 function Find-BeastPython {
     $candidates = [System.Collections.Generic.List[string]]::new()
@@ -48,6 +48,7 @@ if (-not $python) {
 $source = $PSScriptRoot
 . (Join-Path $source 'tools\Update-Helpers.ps1')
 . (Join-Path $source 'tools\Install-Transaction.ps1')
+. (Join-Path $source 'tools\Shell-Identity.ps1')
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 $destination = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $InstallDir).Path)
 $lockPath = Join-Path $destination '.beastsnip-update.lock'
@@ -94,6 +95,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'Candidate self-tests failed. No live application files were replaced.' }
             & (Join-Path $candidate 'tests/test_updater.ps1')
             & (Join-Path $candidate 'tests/test_transactions.ps1')
+            & (Join-Path $candidate 'tests/test_shell_identity.ps1')
         } finally {
             if ($null -eq $previousDataDir) { Remove-Item Env:BEASTSNIP_DATA_DIR -ErrorAction SilentlyContinue } else { $env:BEASTSNIP_DATA_DIR = $previousDataDir }
             Remove-Item -LiteralPath $smokeDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -140,6 +142,9 @@ try {
         $shortcut.IconLocation = (Join-Path $destination 'beastsnip/resources/beastsnip.ico') + ',0'
         $shortcut.Description = 'BeastSnip - screenshots, projects and offline OCR'
         $shortcut.Save()
+        $iconPath = Join-Path $destination 'beastsnip/resources/beastsnip.ico'
+        $relaunchCommand = '"' + $activeWindowed + '" "' + (Join-Path $destination 'run_beastsnip.py') + '"'
+        Set-BeastSnipShortcutIdentity -ShortcutPath $shortcutPath -IconPath $iconPath -RelaunchCommand $relaunchCommand
     } finally { Pop-Location }
     $transaction.State = 'complete'
     Save-BeastSnipTransaction $transaction
