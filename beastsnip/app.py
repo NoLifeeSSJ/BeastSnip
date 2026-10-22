@@ -21,6 +21,8 @@ from .autosave import AutosaveSession, capture_path
 from .ui import CommandPalette, icon, tool_button
 from .ocr import OCRJob, find_tesseract
 from .storage import History
+from .library import date_matches, path_key
+from .workflows import WorkspaceWorkflows
 from .style import STYLE
 from .tasks import Task
 from .windows import WindowsIntegration
@@ -71,7 +73,7 @@ class SingleInstance(QObject):
         self.lock.unlock()
 
 
-class MainWindow(QMainWindow):
+class MainWindow(WorkspaceWorkflows, QMainWindow):
     def __init__(self, smoke=False):
         super().__init__()
         self.smoke = smoke
@@ -111,6 +113,10 @@ class MainWindow(QMainWindow):
         brand_menu.addSeparator()
         brand_menu.addAction(icon('settings'), 'Preferences', self.open_settings)
         brand_menu.addAction(icon('help'), 'Keyboard shortcuts', self.show_shortcuts)
+        brand_menu.addAction(icon('project'), 'Open Editable Project…', self.open_project)
+        brand_menu.addAction(icon('recovery'), 'Restore Last Session', self.restore_recovery)
+        brand_menu.addAction('Clear Automatic Recovery Data…', lambda: self.clear_recovery())
+        brand_menu.addAction(icon('updates'), 'Update Centre', self.show_update_centre)
         brand_menu.addAction('About BeastSnip', self.show_about)
         brand_menu.addSeparator()
         brand_menu.addAction('Quit BeastSnip', self.quit_app)
@@ -137,6 +143,13 @@ class MainWindow(QMainWindow):
         self.capture_menu.addAction(icon('capture'), 'Capture a region', lambda: self.capture('region'))
         self.capture_menu.addAction(icon('window'), 'Capture active window', lambda: self.capture('window'))
         self.capture_menu.addAction(icon('monitor'), 'Capture selected monitor', lambda: self.capture('monitor'))
+        self.capture_menu.addAction(icon('scroll'), 'Scrolling capture…', self.start_scrolling_capture)
+        self.capture_menu.addSeparator()
+        self.quick_action = self.capture_menu.addAction('Quick Capture · always save PNG, keep the editor')
+        self.quick_action.setCheckable(True)
+        self.quick_action.setChecked(self.settings['quick_capture'])
+        self.quick_action.toggled.connect(self.set_quick_capture)
+        self.capture_menu.addAction('Show latest capture preview', self.show_quick_preview)
         self.capture_menu.addSeparator()
         options = QWidget()
         option_layout = QVBoxLayout(options)
@@ -158,6 +171,11 @@ class MainWindow(QMainWindow):
         self.capture_menu.addAction(option_action)
         self.capture_button.setMenu(self.capture_menu)
         nav.addWidget(self.capture_button)
+        self.quick_button = tool_button('quick', 'Quick')
+        self.quick_button.setCheckable(True)
+        self.quick_button.setObjectName('quickToggle')
+        self.quick_button.toggled.connect(self.set_quick_capture)
+        nav.addWidget(self.quick_button)
         self.command_button = tool_button('search', 'Find action (Ctrl+K)', self.show_commands, icon_only=True)
         nav.addWidget(self.command_button)
         nav.addWidget(tool_button('folder', 'Open image (Ctrl+O)', self.open_image, icon_only=True))
@@ -212,16 +230,12 @@ class MainWindow(QMainWindow):
         self.screenshot_count = QLabel('Your captures will appear here.')
         self.screenshot_count.setObjectName('muted')
         screenshot_layout.addWidget(self.screenshot_count)
+        self.add_library_filters(screenshot_layout)
         self.screenshots = QListWidget()
         self.configure_gallery(self.screenshots)
         self.screenshots.itemDoubleClicked.connect(lambda item: self.open_screenshot())
         screenshot_layout.addWidget(self.screenshots, 1)
-        screenshot_actions = QHBoxLayout()
-        self.add_button(screenshot_actions, 'Open in Editor', self.open_screenshot)
-        self.add_button(screenshot_actions, 'Copy Image', self.copy_screenshot)
-        self.add_button(screenshot_actions, 'Open Folder', self.open_screenshots_folder)
-        screenshot_actions.addStretch()
-        screenshot_layout.addLayout(screenshot_actions)
+        self.add_library_actions(screenshot_layout)
         self.library_tabs.addTab(screenshot_page, 'Screenshots')
         history_page = QWidget()
         history_layout = QVBoxLayout(history_page)
@@ -259,15 +273,20 @@ class MainWindow(QMainWindow):
         self.editor.history_requested.connect(self.save_history)
         self.editor.pin_requested.connect(self.pin_image)
         self.editor.ocr_requested.connect(self.extract_text)
+        self.editor.project_requested.connect(self.save_editable_project)
         self.stack.addWidget(self.editor)
         root.addWidget(self.stack, 1)
         self.setCentralWidget(central)
+        self.init_workflows(root)
+        self.sync_capture_preferences()
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
         self.tray.setToolTip("BeastSnip · local screenshots")
         menu = QMenu(self)
         for label, callback in [("New region capture", lambda: self.capture("region")),
                                 ("Capture active window", lambda: self.capture("window")),
                                 ("Capture selected monitor", lambda: self.capture("monitor")),
+                                ("Scrolling capture", self.start_scrolling_capture),
+                                ("Show latest preview", self.show_quick_preview), ("Update Centre", self.show_update_centre),
                                 ("Open gallery", self.show_gallery), ("Settings", self.open_settings), ("Quit BeastSnip", self.quit_app)]:
             menu.addAction(label, callback)
         self.tray.setContextMenu(menu)
@@ -354,6 +373,9 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def confirm_discard(self):
+        if self.updating:
+            self.statusBar().showMessage('An update is in progress. Follow the PowerShell window to finish or cancel it.', 8000)
+            return False
         if not self.finish_autosaves():
             return False
         if self.export_busy or self.history_busy:
@@ -393,12 +415,15 @@ class MainWindow(QMainWindow):
             previous = self.autosave
             self.autosave = None
             previous.retire()
-        doc = Document(image)
+        self.preserve_previous_recovery()
+        self.project_path = None
+        doc = image if isinstance(image, Document) else Document(image)
         doc.history_id = history_id
-        if history_id is None:
+        if not isinstance(image, Document) and history_id is None:
             doc.saved_revision = -1
         self.doc = doc
         self.editor.set_document(doc)
+        self.recovery.attach(doc)
         self.editor_nav.setEnabled(True)
         self.stack.setCurrentWidget(self.editor)
         self.editor_nav.setChecked(True)
@@ -411,6 +436,8 @@ class MainWindow(QMainWindow):
             return
         self.autosave = AutosaveSession(self.doc, path or capture_path(self.settings['screenshots_dir']), self.task, self)
         self.autosaves.append(self.autosave)
+        self.recovery.png_path = str(self.autosave.path)
+        self.recovery.schedule()
         self.autosave.state_changed.connect(self.autosave_changed)
         self.autosave.flush()
 
@@ -427,9 +454,13 @@ class MainWindow(QMainWindow):
         self.editor.update_state()
         session = self.autosave
         failures = [item for item in self.autosaves if item.error]
-        self.save_warning.setVisible(bool(failures))
+        self.save_warning.setVisible(bool(failures or self.recovery.error or self.quick_store.failures))
         if failures:
             self.save_warning_text.setText('Could not autosave. Your capture is still open. Retry, use Save As, or choose a writable Screenshots folder in Preferences.\n' + failures[-1].error)
+        elif self.recovery.error:
+            self.save_warning_text.setText('The PNG save and the editable recovery save are separate. Editable recovery could not be saved: ' + self.recovery.error)
+        elif self.quick_store.failures:
+            self.save_warning_text.setText('One or more Quick Captures are still in memory because PNG saving failed. Retry saves to keep them.')
         if session:
             text = 'Save failed · Retry with Save' if session.error else 'Saving capture…' if session.busy or session.pending else 'Saved to Screenshots'
             self.editor.save_status.setText(text)
@@ -443,6 +474,9 @@ class MainWindow(QMainWindow):
         self.capture_button.setToolTip('New region · ' + self.settings['hotkey'] + '\nArrow: window, monitor and delay options')
 
     def retry_autosaves(self):
+        self.retry_quick_captures()
+        if self.recovery.error:
+            self.recovery.flush()
         for session in self.autosaves[:]:
             if session.error:
                 # The user may have selected a new writable directory after a failure.
@@ -451,6 +485,10 @@ class MainWindow(QMainWindow):
                 session.flush()
 
     def finish_autosaves(self):
+        self.recovery.flush()
+        if self.recovery.busy or (self.recovery.enabled and self.recovery.pending and not self.recovery.error):
+            self.statusBar().showMessage('Finishing editable recovery. Try again in a moment.', 5000)
+            return False
         for session in self.autosaves[:]:
             if session.pending and not session.error:
                 session.flush()
@@ -497,18 +535,29 @@ class MainWindow(QMainWindow):
         if not Path(self.settings['screenshots_dir']).exists():
             self.screenshots.clear()
             self.screenshot_count.setText('Your next snip will appear here. Use New Snip or paste an image.')
+            self.load_more.hide()
             return
         if self._screenshot_loading:
             self._refresh_again = True
             return
         self._screenshot_loading = True
         directory, term = Path(self.settings['screenshots_dir']), self.search.text().casefold()
+        period, favourites_only, limit = self.date_filter.currentData(), self.favourites_filter.isChecked(), self.library_limit
         def load():
             if not directory.exists():
                 return [], 0
-            paths = sorted((p for p in directory.glob('*.png') if term in p.name.casefold()), key=lambda p: p.stat().st_mtime, reverse=True)
+            favourites = self.library_index.favourites()
+            paths = []
+            for path in directory.glob('*.png'):
+                try:
+                    modified = path.stat().st_mtime
+                    if term in path.name.casefold() and date_matches(modified, period) and (not favourites_only or path_key(path) in favourites):
+                        paths.append((modified, path))
+                except FileNotFoundError:
+                    continue
+            paths.sort(key=lambda entry: entry[0], reverse=True)
             rows = []
-            for path in paths[:120]:
+            for modified, path in paths[:limit]:
                 reader = QImageReader(str(path))
                 size = reader.size()
                 if not size.isValid():
@@ -516,35 +565,41 @@ class MainWindow(QMainWindow):
                 reader.setScaledSize(size.scaled(230, 140, Qt.AspectRatioMode.KeepAspectRatio))
                 thumb = reader.read()
                 if not thumb.isNull():
-                    label = datetime.fromtimestamp(path.stat().st_mtime).strftime("Snip · %d %b · %H:%M:%S") if path.stem.startswith("BeastSnip_") else path.stem
-                    rows.append((str(path), size.width(), size.height(), thumb, label))
+                    label = datetime.fromtimestamp(modified).strftime('Snip · %d %b · %H:%M:%S') if path.stem.startswith('BeastSnip_') else path.stem
+                    favourite = path_key(path) in favourites
+                    rows.append((str(path), size.width(), size.height(), thumb, label, favourite))
             return rows, len(paths)
         def completed(result, error):
             self._screenshot_loading = False
-            if directory != Path(self.settings['screenshots_dir']) or term != self.search.text().casefold():
+            current = (Path(self.settings['screenshots_dir']), self.search.text().casefold(), self.date_filter.currentData(), self.favourites_filter.isChecked(), self.library_limit)
+            if (directory, term, period, favourites_only, limit) != current:
                 self._refresh_again = True
             elif error:
                 self.screenshot_count.setText('Could not read Screenshots: ' + error)
             else:
                 rows, total = result
-                selected = self.screenshots.currentItem()
-                previous = selected.data(Qt.ItemDataRole.UserRole) if selected else None
+                previous = set(self.selected_screenshots())
                 self.screenshots.clear()
-                for path, width, height, thumb, label in rows:
-                    item = QListWidgetItem(QIcon(QPixmap.fromImage(thumb)), f'{label}\n{width} × {height} px')
+                for path, width, height, thumb, label, favourite in rows:
+                    item = QListWidgetItem(QIcon(QPixmap.fromImage(thumb)), ('★ ' if favourite else '') + f'{label}\n{width} × {height} px')
                     item.setData(Qt.ItemDataRole.UserRole, path)
-                    item.setToolTip(path)
+                    item.setToolTip(path + ('\nFavourite' if favourite else ''))
                     self.screenshots.addItem(item)
-                    if path == previous:
-                        self.screenshots.setCurrentItem(item)
-                self.screenshot_count.setText((f'{total} screenshot' + ('s' if total != 1 else '') + (' · Showing the newest 120' if total > 120 else '')) if total else 'No matches.' if term else 'Your next snip will appear here. Use New Snip or paste an image.')
+                    if path in previous:
+                        item.setSelected(True)
+                self.screenshot_count.setText((f'{total} screenshot' + ('s' if total != 1 else '') + (f' · Showing the newest {limit}' if total > limit else '')) if total else 'No matches.' if term or favourites_only or period != 'all' else 'Your next snip will appear here. Use New Snip or paste an image.')
                 self.screenshot_count.setToolTip(str(directory))
+                self.load_more.setVisible(total > limit)
+                self.library_selection_changed()
             if self._refresh_again:
                 self._refresh_again = False
                 self.refresh_screenshots()
         self.task(load, completed)
 
     def selected_screenshot(self):
+        selected = self.selected_screenshots()
+        if len(selected) == 1:
+            return selected[0]
         item = self.screenshots.currentItem()
         if not item:
             self.statusBar().showMessage('Select a screenshot first.', 5000)
@@ -566,12 +621,21 @@ class MainWindow(QMainWindow):
                 self.copy_to_clipboard(image)
 
     def show_commands(self):
+        if self.updating:
+            return
         has_doc = lambda: self.doc is not None
         always = lambda: True
         commands = [
             ('Capture a region · New Snip', lambda: self.capture('region'), always),
             ('Capture active window', lambda: self.capture('window'), always),
             ('Capture selected monitor', lambda: self.capture('monitor'), always),
+            ('Scrolling capture · long webpages and documents', self.start_scrolling_capture, always),
+            ('Toggle Quick Capture mode', lambda: self.set_quick_capture(not self.settings['quick_capture']), always),
+            ('Show latest Quick Capture preview', self.show_quick_preview, always),
+            ('Open Editable Project', self.open_project, always),
+            ('Save Editable Project · Ctrl+Shift+P', self.save_editable_project, has_doc),
+            ('Restore last editable session', self.restore_recovery, always),
+            ('Update Centre · releases and rollback', self.show_update_centre, always),
             ('Open an image · Ctrl+O', self.open_image, always),
             ('Paste image from clipboard · Ctrl+V', self.paste_image, always),
             ('Open screenshot library', self.show_gallery, always),
@@ -613,7 +677,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, 'BeastSnip · Keyboard shortcuts',
             'CAPTURE\n' + self.settings['hotkey'] + '  New region (global)\n\n'
             'WORKSPACE\nCtrl+K  Find any action\nCtrl+O  Open image\nCtrl+V  Paste image\n'
-            'Ctrl+S  Save to Screenshots\nCtrl+Shift+S  Save As…\nCtrl+C  Copy image (or selected OCR text)\n'
+            'Ctrl+S  Save to Screenshots\nCtrl+Shift+P  Save Editable Project\nCtrl+Shift+S  Save As…\nCtrl+C  Copy image (or selected OCR text)\n'
             'Ctrl+Z / Ctrl+Y  Undo / Redo\nCtrl+Shift+F  Focus workspace\nF5  Refresh library\n\n'
             'TOOLS\nV Select · H Pan · P Pen · I Highlight · A Arrow\nB Box · F Fill · O Ellipse · T Text · N Step\n'
             'R Redact · C Crop · Esc Select\n\nCtrl+wheel to zoom · Middle mouse to pan\nDouble-click a text annotation to edit it.')
@@ -622,10 +686,12 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, 'About BeastSnip', f'BeastSnip {__version__}\nCapture. Clarify. Keep.\n\nNative Windows screenshots, annotations and offline OCR.\nYour images stay on your computer.\n\nNew captures: ' + self.settings['screenshots_dir'])
 
     def capture(self, mode):
+        if self.updating:
+            return
         if QApplication.activeModalWidget() is not None:
             self.statusBar().showMessage("Close the open dialog before capturing.", 7000)
             return
-        if self.capture_busy or not self.confirm_discard():
+        if self.capture_busy or (not self.settings["quick_capture"] and not self.confirm_discard()):
             return
         try:
             windows.require_windows()
@@ -634,11 +700,13 @@ class MainWindow(QMainWindow):
             return
         self.integration.track_foreground()
         self.capture_mode = mode
+        self.capture_quick = self.settings["quick_capture"]
         self.capture_hwnd = self.integration.last_external
         self.capture_monitor = self.monitor.currentData()
         self.capture_busy = True
         self.was_visible = self.isVisible()
-        self.hidden_pins = [pin for pin in self.pins if pin.isVisible()]
+        owned = list(self.pins) + ([self.quick_preview] if self.quick_preview else [])
+        self.hidden_pins = [pin for pin in owned if pin.isVisible()]
         for pin in self.hidden_pins:
             pin.hide()
         self.hide()
@@ -647,9 +715,9 @@ class MainWindow(QMainWindow):
 
     def perform_capture(self):
         try:
-            if self.capture_mode == "region":
-                self.capture_session = RegionSession(self)
-                self.capture_session.captured.connect(self.captured)
+            if self.capture_mode in ("region", "scroll"):
+                self.capture_session = RegionSession(self, magnifier=self.settings["magnifier"])
+                self.capture_session.captured.connect(self.scrolling_region_selected if self.capture_mode == "scroll" else self.captured)
                 self.capture_session.cancelled.connect(self.capture_cancelled)
                 self.capture_session.show()
                 return
@@ -670,12 +738,16 @@ class MainWindow(QMainWindow):
 
     def restore_pins(self):
         for pin in getattr(self, "hidden_pins", []):
-            if pin in self.pins:
+            if pin in self.pins or pin is self.quick_preview:
                 pin.show()
         self.hidden_pins = []
 
     def capture_cancelled(self):
         self.capture_busy = False
+        if self.scroll_controller:
+            self.scroll_controller.cleanup()
+            self.scroll_controller.deleteLater()
+            self.scroll_controller = None
         if self.capture_session:
             self.capture_session.deleteLater()
             self.capture_session = None
@@ -686,10 +758,17 @@ class MainWindow(QMainWindow):
 
     def captured(self, image):
         self.capture_busy = False
+        if self.scroll_controller:
+            self.scroll_controller.cleanup()
+            self.scroll_controller.deleteLater()
+            self.scroll_controller = None
         if self.capture_session:
             self.capture_session.deleteLater()
             self.capture_session = None
         self.restore_pins()
+        if getattr(self, "capture_quick", self.settings["quick_capture"]):
+            self.captured_quickly(image)
+            return
         self.set_document(image)
         self.statusBar().showMessage("Captured · Choose a tool on the left, or press Ctrl+K to find an action.")
         if self.settings["auto_save"]:
@@ -700,11 +779,17 @@ class MainWindow(QMainWindow):
             self.save_history()
 
     def open_image(self, path=None):
+        if isinstance(path, (str, Path)) and str(path).lower().endswith(".beastsnip"):
+            self.open_project(path)
+            return
         if not self.confirm_discard():
             return
         if not isinstance(path, (str, Path)):
-            path = QFileDialog.getOpenFileName(self, "Open image", self.settings["save_dir"], "Images (*.png *.jpg *.jpeg *.bmp *.webp)")[0]
+            path = QFileDialog.getOpenFileName(self, "Open image", self.settings["save_dir"], "Images and projects (*.png *.jpg *.jpeg *.bmp *.webp *.beastsnip)")[0]
         if not path:
+            return
+        if str(path).lower().endswith(".beastsnip"):
+            self.load_project_into_editor(path)
             return
         try:
             reader = QImageReader(str(path))
@@ -719,12 +804,12 @@ class MainWindow(QMainWindow):
             self.error(error)
 
     def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls() and any(url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in (".png", ".jpg", ".jpeg", ".bmp", ".webp") for url in event.mimeData().urls()):
+        if event.mimeData().hasUrls() and any(url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".beastsnip") for url in event.mimeData().urls()):
             event.acceptProposedAction()
 
     def dropEvent(self, event):
         for url in event.mimeData().urls():
-            if url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in (".png", ".jpg", ".jpeg", ".bmp", ".webp"):
+            if url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".beastsnip"):
                 self.open_image(url.toLocalFile())
                 event.acceptProposedAction()
                 break
@@ -953,9 +1038,11 @@ class MainWindow(QMainWindow):
                 self.error(error)
 
     def open_settings(self):
+        if self.updating:
+            return
         self.bring_forward()
-        if self.history_busy:
-            self.statusBar().showMessage("Wait for history saving to finish before changing settings.")
+        if self.history_busy or self.recovery.busy:
+            self.statusBar().showMessage("Wait for the current save to finish before changing settings.")
             return
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -972,6 +1059,12 @@ class MainWindow(QMainWindow):
             if old["history_dir"] != values["history_dir"] and self.doc:
                 self.doc.history_id = None
             warning = self.integration.register(values["hotkey"])
+            self.recovery.enabled = values["recover_session"] and not self.smoke
+            if not values["recover_session"]:
+                self.clear_recovery(confirm=False)
+            elif self.recovery.enabled:
+                self.recovery.schedule()
+            self.sync_capture_preferences()
             self.refresh_library()
             self.update_autosave_ui()
             self.statusBar().showMessage(warning or "Settings saved. New captures use these preferences.", 15000)
@@ -1002,6 +1095,11 @@ class MainWindow(QMainWindow):
             event.accept()
 
     def quit_app(self):
+        if self.quick_store.failures and not self.smoke:
+            choice = QMessageBox.question(self, "Unstored Quick Captures", "Some Quick Captures have not been saved. Discard them and quit? Choose No to retry saving first.", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            if choice != QMessageBox.StandardButton.Yes:
+                self.retry_quick_captures()
+                return
         if self.smoke:
             self.shutdown()
             return
@@ -1021,6 +1119,14 @@ class MainWindow(QMainWindow):
             return
         self.quitting = True
         self.capture_timer.stop()
+        self.recovery.timer.stop()
+        if self.quick_preview:
+            self.quick_preview.close()
+        if self.scroll_controller:
+            self.scroll_controller.cleanup()
+        if self.update_dialog:
+            self.update_dialog.poll_timer.stop()
+            self.update_dialog.close()
         if self.capture_session:
             self.capture_session.cleanup()
         self.integration.close()

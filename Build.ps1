@@ -5,7 +5,8 @@ $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Build the Windows executable on Windows; PyInstaller does not cross-compile.' }
 Push-Location -LiteralPath $PSScriptRoot
 try {
-    $python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
+    . (Join-Path $PSScriptRoot 'tools/Install-Transaction.ps1')
+    $python = Get-BeastSnipPython -InstallDir $PSScriptRoot
     if (-not (Test-Path -LiteralPath $python)) { throw 'Run Install.ps1 first.' }
     & $python -m pip install --disable-pip-version-check -r requirements-build.txt
     if ($LASTEXITCODE -ne 0) { throw 'Build dependency installation failed.' }

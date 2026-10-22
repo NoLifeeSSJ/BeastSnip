@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import io
+import json
 from pathlib import Path
 import re
 import zipfile
@@ -20,7 +21,7 @@ for directory in ("beastsnip", "tests", "tools"):
 stream = io.BytesIO()
 with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
     for filename in sorted(FILES):
-        info = zipfile.ZipInfo(filename, (2026, 10, 21, 0, 0, 0))
+        info = zipfile.ZipInfo(filename, (2026, 10, 22, 0, 0, 0))
         info.compress_type = zipfile.ZIP_DEFLATED
         info.external_attr = 0o644 << 16
         archive.writestr(info, (ROOT / filename).read_bytes())
@@ -87,5 +88,14 @@ repair.write_bytes(updater.read_bytes())
 versioned_update = OUT / f"Update-BeastSnip-{VERSION}.ps1"
 versioned_update.write_bytes(updater.read_bytes())
 (OUT / "BeastSnip-source.zip").write_bytes(payload)
-(OUT / "SHA256SUMS.txt").write_text("\n".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in (installer, updater, versioned_update, repair, OUT / "BeastSnip-source.zip")) + "\n", encoding="ascii")
+section = (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8').split('## ' + VERSION + ' ', 1)[1].split('\n## ', 1)[0]
+notes = [line[2:].strip() for line in section.splitlines() if line.startswith('- ')]
+if not notes:
+    raise ValueError('The release must include notes in CHANGELOG.md.')
+manifest = OUT / 'latest.json'
+manifest.write_text(json.dumps({'schema': 1, 'version': VERSION,
+    'updater_url': f'https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/v{VERSION}/delivery/{versioned_update.name}',
+    'updater_sha256': hashlib.sha256(versioned_update.read_bytes()).hexdigest(),
+    'notes': notes}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
+(OUT / "SHA256SUMS.txt").write_text("\n".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in (installer, updater, versioned_update, repair, OUT / "BeastSnip-source.zip", manifest)) + "\n", encoding="ascii")
 print(f"Created setup/updater scripts and source ZIP ({len(payload):,} bytes).")

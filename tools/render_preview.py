@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication
 
 from beastsnip.app import MainWindow
 from beastsnip.document import Annotation
+from beastsnip.updates import UpdateCentre
 from beastsnip.ocr import find_tesseract, recognize
 from beastsnip.style import STYLE
 
@@ -65,7 +66,7 @@ def main():
         window.editor.canvas.set_tool('arrow')
         window.editor.canvas.fit_image()
         app.processEvents()
-        window.grab().save(str(ROOT / 'delivery/BeastSnip-2.0-editor.png'))
+        window.grab().save(str(ROOT / 'delivery/BeastSnip-2.1-editor.png'))
         text = recognize(window.doc.flatten(), find_tesseract(), 'eng')
         assert 'automatically' in text
         window.doc.ocr_text = text
@@ -73,12 +74,31 @@ def main():
         window.save_history()
         settle(window)
         app.processEvents()
-        window.grab().save(str(ROOT / 'delivery/BeastSnip-2.0-ocr.png'))
+        window.grab().save(str(ROOT / 'delivery/BeastSnip-2.1-ocr.png'))
         window.show_gallery()
         settle(window)
+        window.screenshots.item(0).setSelected(True)
+        window.screenshots.item(1).setSelected(True)
+        window.toggle_favourites()
+        settle(window)
+        window.date_filter.setCurrentIndex(1)
+        settle(window)
         app.processEvents()
-        window.grab().save(str(ROOT / 'delivery/BeastSnip-2.0-library.png'))
-        print('Rendered actual workspace, real OCR output, and the auto-saved Screenshots library.')
+        window.grab().save(str(ROOT / 'delivery/BeastSnip-2.1-library.png'))
+        window.set_quick_capture(True)
+        window.captured(sample('Keep capturing.', 'Open, copy or pin from the preview.', '#69bca0'))
+        settle(window)
+        window.quick_preview.grab().save(str(ROOT / 'delivery/BeastSnip-2.1-quick.png'))
+        window.quick_preview.hide()
+        centre = UpdateCentre(window)
+        centre.notes.setPlainText('BeastSnip 2.1.0\n\n' + '\n\n'.join(line[2:] for line in (ROOT / 'CHANGELOG.md').read_text().split('## 2.1.0 ', 1)[1].split('\n## ', 1)[0].splitlines() if line.startswith('- ')))
+        centre.status.setText('BeastSnip 2.1.0 · release notes preview')
+        centre.show(); app.processEvents()
+        centre.grab().save(str(ROOT / 'delivery/BeastSnip-2.1-updates.png'))
+        centre.close()
+        window.resize(900, 600); app.processEvents()
+        window.grab().save(str(ROOT / 'delivery/BeastSnip-2.1-laptop.png'))
+        print('Rendered actual 2.1 workspace, OCR, library, Quick Capture preview, Update Centre and laptop layout.')
         window.shutdown()
 
 

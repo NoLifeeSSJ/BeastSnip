@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param([switch]$Console)
 $ErrorActionPreference = 'Stop'
-$python = Join-Path $PSScriptRoot ('.venv\Scripts\' + $(if ($Console) { 'python.exe' } else { 'pythonw.exe' }))
+. (Join-Path $PSScriptRoot 'tools/Install-Transaction.ps1')
+$python = Get-BeastSnipPython -InstallDir $PSScriptRoot -Windowed:(-not $Console)
 if (-not (Test-Path -LiteralPath $python)) { throw 'Run Install.ps1 first to prepare BeastSnip.' }
 $entry = Join-Path $PSScriptRoot 'run_beastsnip.py'
 if ($Console) {

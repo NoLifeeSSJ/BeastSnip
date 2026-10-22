@@ -50,6 +50,11 @@ QToolButton#brand { background: transparent; border: 0; font-size: 19px; font-we
 QToolButton#brand:hover { background: #2d2b43; }
 QToolButton#workspaceTab { background: transparent; border: 1px solid transparent; color: #9da8bd; }
 QToolButton#workspaceTab:checked { background: #303346; border-color: #47475e; color: #ffffff; }
+QToolButton#quickToggle { background: #202a34; border-color: #3e5a60; color: #afccd3; }
+QToolButton#quickToggle:checked { background: #244c48; border-color: #76c8af; color: #c5ffe9; }
+QWidget#recoveryBanner { background: #1a3034; border: 1px solid #375b61; border-radius: 8px; }
+QWidget#recoveryBanner QLabel { background: transparent; color: #c5eee5; }
+QWidget#quickPreview { background: #1a2030; border: 1px solid #8b6fb9; border-radius: 12px; }
 QWidget#toolRail, QWidget#contextBar { background: #1a1f2b; border: 1px solid #2b3346; border-radius: 10px; }
 QLabel#railHeading { background: transparent; color: #8290aa; font-size: 9px; font-weight: 600; padding: 3px 2px; }
 QToolButton#annotationTool { background: transparent; border: 1px solid transparent; padding: 4px 1px; font-size: 10px; }

@@ -4,7 +4,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget, QSizePolicy)
+    QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget, QSizePolicy, QScrollArea)
 
 from .windows import parse_hotkey
 
@@ -30,7 +30,11 @@ class SettingsDialog(QDialog):
             form.setContentsMargins(16, 20, 16, 16)
             form.setSpacing(14)
             forms[name] = form
-            tabs.addTab(page, name)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(page)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            tabs.addTab(scroll, name)
         for key, title, folder, tab in [
             ('screenshots_dir', 'Screenshots folder', True, 'Captures & storage'),
             ('save_dir', 'Save As default folder', True, 'Captures & storage'),
@@ -62,6 +66,9 @@ class SettingsDialog(QDialog):
         for key, title, tab in [
             ('auto_save', 'Automatically save new captures and pasted images', 'Captures & storage'),
             ('auto_history', 'Also add new captures to Saved History', 'Captures & storage'),
+            ('recover_session', 'Recover editable sessions after restart', 'Captures & storage'),
+            ('quick_capture', 'Quick Capture: save PNGs without opening the editor', 'Workspace'),
+            ('magnifier', 'Show the pixel magnifier during region selection', 'Workspace'),
             ('auto_copy', 'Copy new captures to the clipboard', 'Workspace'),
             ('close_to_tray', 'Keep running in the tray when I close the window', 'Workspace')]:
             field = QCheckBox(title)
@@ -69,8 +76,8 @@ class SettingsDialog(QDialog):
             self.fields[key] = field
             forms[tab].addRow(field)
         notes = {
-            'Captures & storage': 'A new capture is saved as a PNG before editing. Later image edits update that same PNG automatically. Separate exports, history items and earlier clipboard copies remain independent.\n\nFolder and auto-save preferences apply to new captures. Captures already open continue saving to their existing file. History retains searchable text only when you save it there.',
-            'Workspace': 'Ctrl+K finds any action. F1 shows keyboard shortcuts. Tool controls appear only when relevant. JPEG exports use a white background. The capture menu also lets you choose a delay and monitor.',
+            'Captures & storage': 'A new capture is saved as a PNG before editing. Later image edits update that same PNG automatically. Separate exports, history items and earlier clipboard copies remain independent.\n\nFolder and auto-save preferences apply to new captures. Captures already open continue saving to their existing file. History retains searchable text only when you save it there.\n\nEditable recovery and .beastsnip projects retain the original image and annotations, including pixels under redactions. Share flattened PNGs when originals should not be included. Turning recovery off clears automatic recovery files; explicit projects remain.',
+            'Workspace': 'Ctrl+K finds any action. F1 shows keyboard shortcuts. Tool controls appear only when relevant. JPEG exports use a white background. Quick Capture always saves its PNGs and keeps the current editor session. The preview offers Open, Copy and Pin. Use Scrolling Capture for long content and M to toggle the magnifier during selection.',
             'Offline OCR': 'OCR runs on this computer. English uses eng; multiple languages use codes such as eng+deu. Leave paths empty for automatic discovery. Use Repair-OCR.ps1 if the runtime or a language is missing.'
         }
         for tab, text in notes.items():

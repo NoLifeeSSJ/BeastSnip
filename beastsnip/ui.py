@@ -7,6 +7,12 @@ from PySide6.QtWidgets import (QDialog, QLabel, QLineEdit, QListWidget,
 
 
 PATHS = {
+    'star': '<path d="m12 3 3 6 6 1-4.5 4.5 1 6.5-5.5-3-5.5 3 1-6.5L3 10l6-1z"/>',
+    'quick': '<path d="m13 2-9 12h7l-1 8 10-13h-7z"/>',
+    'project': '<rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h6M7 11h6M21 7v14H7"/>',
+    'recovery': '<path d="M3 10a9 9 0 1 1 2 8M3 3v7h7M12 7v6l4 2"/>',
+    'updates': '<path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/>',
+    'scroll': '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="m9 8 3-3 3 3m-6 8 3 3 3-3M12 6v12"/>',
     'select': '<path d="m5 3 14 9-7 1-3 7z"/>',
     'pan': '<path d="M7 12V7a2 2 0 0 1 4 0v5-7a2 2 0 0 1 4 0v7-5a2 2 0 0 1 4 0v7c0 5-3 8-7 8-3 0-4-2-6-5l-3-4a2 2 0 0 1 3-2l3 3"/>',
     'pen': '<path d="m4 16 11-11 4 4L8 20H4zM13 7l4 4"/>',

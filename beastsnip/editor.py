@@ -260,6 +260,7 @@ class Editor(QWidget):
     history_requested = Signal()
     pin_requested = Signal()
     ocr_requested = Signal(object)
+    project_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -401,6 +402,7 @@ class Editor(QWidget):
         more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(more)
         menu.addAction(icon('save'), 'Save As… (Ctrl+Shift+S)', self.save_requested.emit)
+        menu.addAction(icon('project'), 'Save Editable Project… (Ctrl+Shift+P)', self.project_requested.emit)
         menu.addAction(icon('library'), 'Save to History', self.history_requested.emit)
         menu.addAction(icon('pin'), 'Pin on Screen', self.pin_requested.emit)
         menu.addSeparator()
@@ -422,6 +424,7 @@ class Editor(QWidget):
         shortcuts = [
             ('Ctrl+C', self.copy_requested.emit), ('Ctrl+S', self.quicksave_requested.emit),
             ('Ctrl+Shift+S', self.save_requested.emit),
+            ('Ctrl+Shift+P', self.project_requested.emit),
             ('Ctrl+Z', lambda: self.canvas.doc.undo() if self.canvas.doc else None),
             ('Ctrl+Y', lambda: self.canvas.doc.redo() if self.canvas.doc else None),
             ('Ctrl+Shift+Z', lambda: self.canvas.doc.redo() if self.canvas.doc else None),
@@ -516,7 +519,9 @@ class Editor(QWidget):
         if self.canvas.doc:
             self.canvas.doc.changed.disconnect(self.update_state)
         self.canvas.set_document(doc)
+        self.ocr_text.blockSignals(True)
         self.ocr_text.clear()
+        self.ocr_text.blockSignals(False)
         self.hide_ocr()
         self.escape()
         doc.changed.connect(self.update_state)

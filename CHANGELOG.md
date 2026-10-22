@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0 — 22 October 2026
+
+- Added Quick Capture: save several snips without replacing the current editor session, with a small non-activating Open / Copy / Pin preview and retry for failed saves.
+- Added editable .beastsnip projects and automatic private session recovery, including original pixels, annotations, extracted text and up to ten undo and ten redo states. Recovery can be disabled and cleared in Preferences.
+- Added an Update Centre with explicit release checks, readable release notes, SHA256-verified updater downloads, installation progress and update-log access.
+- Rebuilt installation around a separately tested candidate and Python runtime. Failed activation checks restore the previous application, runtime selection, settings and desktop shortcut; an interrupted activation is repaired on the next update attempt.
+- Added Screenshots favourites, date filters, multi-select, rename, bulk PNG export, reversible deletion and Load More for larger libraries. Saved History and all existing tools remain available.
+- Added a frozen-pixel magnifier beside the selection cursor, with physical coordinates and an M toggle.
+- Added vertical scrolling capture with automatic scrolling, manual Add Frame, overlap validation, pause, Finish and Cancel. Uncertain alignment stops automatic scrolling and preserves the valid captured portion.
+- Refined the compact capture header, library selection controls, recovery/save notices, action search and scrollable Preferences while preserving the readable OCR sidebar and expanded reader.
+- Shipped the complete update as one self-contained PowerShell script, including dependencies, OCR repair, tests, rollback handling, icon and desktop-shortcut refresh. Existing screenshot folders, OCR preferences and history are retained.
+
 ## 2.0.1 — 21 October 2026
 
 - Fixed an installer self-test that rejected a readable 396-pixel OCR text viewport on Windows because it assumed a 400-pixel minimum from the cloud environment.

@@ -2,17 +2,24 @@
 
 A local Windows 11 screenshot application written in Python 3.12 and PySide6. Dark interface, purple accents, editable annotations, opaque redaction, private history, offline OCR and pinned screenshots. No account, paid API, browser wrapper or remote image processing.
 
-[Update v2.0.1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.0.1.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
+[Update v2.1.0](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.0.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
 
-![BeastSnip 2.0 editing workspace](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.0-editor.png)
+![BeastSnip 2.1 editing workspace](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1-editor.png)
 
-## Windows update fix in 2.0.1
+## BeastSnip 2.1
 
-Version 2.0.0 could stop during self-tests when Windows rendered the OCR text viewport at 396 pixels rather than the test's hardcoded 400. Version 2.0.1 measures readable lines, usable width and the text area's share of the sidebar instead. A regression test accepts the reported 396-pixel layout and still rejects a squashed 140-pixel box. The installer continues to run the full tests, OCR checks, native capture checks, folder setup and shortcut update.
+- **Quick Capture:** enable **Quick** beside New Snip to save a sequence without opening or replacing the editor. Each snip is saved in Screenshots; a small preview offers Open, Copy and Pin. The global capture shortcut and tray actions use the same mode. Turn Quick off to return to normal editing. Quick Capture always saves PNGs, including when ordinary auto-save is off. Failed captures stay in memory with Retry; the last three successful previews are retained, and all saved PNGs remain in the library.
+- **Editable projects and recovery:** use More → Save Editable Project (**Ctrl+Shift+P**) to keep annotations, original pixels, OCR and up to ten undo/redo states in a `.beastsnip` file. Open a project from the BeastSnip menu, Open, or drag and drop. Automatic private recovery saves after a short pause; Restore Session brings back the last session after restart or a crash. An un-restored older session is preserved when starting new work. Preferences can turn recovery off and clear automatic recovery data.
+- **Update Centre:** open the BeastSnip menu → Update Centre, or find it with Ctrl+K. Check releases, read notes, then install a verified updater. Update checks happen only when requested. The app finishes recovery/PNG saves before an in-app update and the updater opens visibly in PowerShell.
+- **Screenshots library:** favourites, Today / Last 7 days / Last 30 days filters, Ctrl/Shift multi-select, rename, bulk export and deletion with Undo. Deleted PNGs move to `.BeastSnipTrash` inside the Screenshots folder; they are retained locally for recovery. Export avoids overwriting existing names. Large libraries show the newest 120 matches, with Load More. Date filters use file modification time, so editing a PNG updates its date.
+- **Capture magnifier:** a zoomed view of frozen desktop pixels follows the selection cursor. Press **M** to toggle it, or change the default in Preferences.
+- **Scrolling capture:** New Snip arrow → Scrolling Capture. Select the scrolling content inside one visible window, excluding toolbars and sticky headers. Automatic mode scrolls downward; manual mode uses Add Frame after you scroll. Esc pauses; Finish saves the joined image; Cancel discards it. It stops on ambiguous overlap, moved/covered windows or size limits instead of guessing. Best with static vertical pages/documents; animations, repeated patterns, sticky content and some nested scrolling areas may require smaller manual steps. Limits: 40 million pixels, 32,000 pixels high, automatic frame limit 2–40. Windows may block automated input to elevated apps; manual scrolling remains available.
 
-Expected errors from the autosave failure/retry test are now captured by that test, so a successful test no longer prints a misleading `ERROR:root` line. If the previous updater stopped at self-tests, rerun the 2.0.1 updater below to complete installation. Existing files and settings are preserved.
+**Editable projects and private recovery contain the original pixels, including beneath redactions.** Share flattened PNG/JPEG exports when originals should not be included. Recovery lives on this computer and is on by default; disabling it clears automatic recovery files. PNG export, clipboard images, pinning and OCR continue to use flattened pixels.
 
-## BeastSnip 2.0: the workspace update
+![Quick Capture preview](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1-quick.png)
+
+## The workspace
 
 The native app now has a compact header and a grouped tool rail. The BeastSnip logo opens navigation, folders, preferences, shortcuts and app information. **Library** and **Editor** let you switch views without discarding the current session.
 
@@ -29,25 +36,29 @@ The native app now has a compact header and a grouped tool rail. The BeastSnip l
 
 Each capture receives a unique timestamped PNG. Image edits, crop, redaction, undo and redo update that same file after a short pause. Writes run in order, in the background, using atomic file replacement. The save indicator distinguishes pending, successful and failed saves. Failures show a persistent banner; **Save** or **Retry save** retries. Changing Preferences can supply a writable directory for an initial failed save. Existing open captures that have already saved keep their original path; folder preferences apply to new captures.
 
-Pasting an image creates a new auto-saved capture when enabled. Opening an external image does not overwrite that source: use Save to create a PNG in Screenshots or Save As to export elsewhere. Reopening a PNG from your Screenshots folder resumes auto-saving edits to it when auto-save is enabled. Captures are flattened on disk; editable objects/undo remain in the open session. PNG auto-save does not store OCR text; Save to History does.
+Pasting an image creates a new auto-saved capture when enabled. Opening an external image does not overwrite that source: use Save to create a PNG in Screenshots or Save As to export elsewhere. Reopening a PNG from your Screenshots folder resumes auto-saving edits to it when auto-save is enabled. PNG captures are flattened; editable objects/undo are retained separately by session recovery and explicit projects. PNG auto-save does not store OCR text; Save to History does.
 
-The initial capture is written **before editing**. Edits replace its current PNG, but earlier clipboard copies, separate exports, saved history entries, pins and file/OS backups remain independent. Turn off auto-save and automatic history in Preferences before capturing if the initial pixels must not be stored. Auto-copy and automatic history remain off by default.
+The initial capture is written **before editing**. Edits replace its current PNG, but earlier clipboard copies, separate exports, saved history entries, pins and file/OS backups remain independent. Turn off auto-save, automatic history, Quick Capture and editable recovery in Preferences before capturing if the initial pixels must not be stored. Auto-copy and automatic history remain off by default.
 
-![BeastSnip 2.0 screenshot library](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.0-library.png)
+![BeastSnip 2.1 screenshot library](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1-library.png)
 
-## Update and repair an existing installation (2.0.1)
+## Update an existing installation (2.1.0)
 
-Save any open capture first. Download [Update-BeastSnip-2.0.1.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.0.1.ps1) to Downloads, then run:
+Save any open capture first. Download [Update-BeastSnip-2.1.0.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.0.ps1) to Downloads, then run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-BeastSnip-2.0.1.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-BeastSnip-2.1.0.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
 ```
 
-This single self-contained script replaces the application with version 2.0.1, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
+This single self-contained script updates the application to version 2.1.0, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
 
 **`-CloseRunningApp` explicitly closes BeastSnip in the target installation, including when it is hidden in the tray. Unsaved in-memory captures/edits will be discarded, so save them first.** Other Python programs and other BeastSnip installations are not targeted. The updater rechecks process identity before stopping it. Without this switch it stops immediately with instructions if BeastSnip is running; it no longer waits silently for two minutes. You can instead use tray → Quit BeastSnip and omit the close switch.
 
-The script displays seven stages, clears generated application bytecode caches and checks the installed package version before testing it. Cache cleanup prevents equal-size source changes with matching archive timestamps from loading old Python bytecode. Settings, history, exports and the virtual environment are outside that cleanup. It prints **`UPDATE COMPLETE - BeastSnip 2.0.1`** only after the required checks pass, then launches the new version. The title bar also shows `BeastSnip 2.0.1`. A failed/cancelled update does not launch the app or claim completion. Logs are saved to `%LOCALAPPDATA%\BeastSnip\update-logs`; failures show the log path. The new filename distinguishes this repair from an older `Update-BeastSnip.ps1` download.
+The script displays **eight stages** and prints **`UPDATE COMPLETE - BeastSnip 2.1.0`** only after the required checks pass. It prepares source and dependencies separately, runs the UI smoke check and tests, then closes the target installation and snapshots rollback data. OCR repair, native capture and folder checks run before application activation. Post-activation version/startup checks and shortcut refresh must also succeed. Generated package bytecode is cleared to prevent stale imports.
+
+Each new Python environment is created at its permanent location under `C:\SnipV1\.beastsnip-runtimes`; it is never moved afterward. `runtime.json` selects the active environment. Existing `.venv` installations remain a supported fallback and are retained. If activation or final checks fail, the previous source, runtime pointer, settings and desktop shortcut are restored automatically; an optional relaunch opens the previous version. Failures before activation leave the live application files in place. Incomplete activation journals are repaired on the next updater run. Backups and old runtimes are retained under `.beastsnip-backups` and `.beastsnip-runtimes`; do not delete the active runtime.
+
+Screenshots, history, editable projects and recovery journals are outside application replacement. Third-party Python/Tesseract installations and downloaded language files are not uninstalled by rollback. Logs are saved to `%LOCALAPPDATA%\BeastSnip\update-logs`; failures show the log path. The title bar confirms the running version. This update also retains the 2.0.1 fix for Windows' 396-pixel OCR viewport: layout checks use font metrics and readable space instead of a hardcoded pixel minimum.
 
 The monitor fix separates Qt's friendly model name (for example `NE160QDM-NM9`) from GDI's capture identifier (`\\.\DISPLAY1`). Region overlays use a unique device-name or position/DPI match; list order is never used as a guess. Friendly and duplicate model names no longer make a connected monitor appear disconnected. A real display-layout change refreshes the selector and asks for a retry.
 
@@ -69,9 +80,9 @@ Download [Setup-BeastSnip.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Setup-BeastSnip.ps1" -InstallDir "C:\SnipV1" -InstallOCR -Launch
 ```
 
-This command extracts the complete project, locates 64-bit Python 3.12–3.14 (preferring 3.12), installs Python 3.12 for your user through `winget` if none is found, creates `C:\SnipV1\.venv`, installs the pinned dependencies, checks imports and real UI startup, runs the self-tests and creates **BeastSnip.lnk on your desktop**, using the included multi-resolution purple BeastSnip icon. `-Launch` opens the app after setup. Re-running setup refreshes dependencies and backs up replaced source files under `%LOCALAPPDATA%\BeastSnip\setup-backups`.
+This command extracts the complete project, locates 64-bit Python 3.12–3.14 (preferring 3.12), installs Python 3.12 for your user through `winget` if none is found, creates a separate Python runtime under `C:\SnipV1\.beastsnip-runtimes`, installs the pinned dependencies, checks imports and real UI startup, runs the self-tests and creates **BeastSnip.lnk on your desktop**, using the included multi-resolution purple BeastSnip icon. `-Launch` opens the app after setup. Re-running setup uses the same candidate checks and reversible activation as the updater.
 
-`-InstallOCR` installs/configures and tests the local Tesseract runtime using the Windows Package Manager and the OCR repair helper. That publisher's installer may request elevation. If OCR repair fails, setup reports failure with a diagnosis; capture and editing files remain installed. Omit `-InstallOCR` to skip that optional installation. The update script always includes OCR repair. Setup needs Internet access for Python, packages and optional Tesseract/language files; normal operation and OCR do not.
+`-InstallOCR` installs/configures and tests the local Tesseract runtime using the Windows Package Manager and the OCR repair helper. That publisher's installer may request elevation. If OCR repair fails, setup reports the error and restores the previous settings; the candidate is not activated. Omit `-InstallOCR` to skip that optional installation. The update script always includes OCR repair. Setup needs Internet access for Python, packages and optional Tesseract/language files; normal operation and OCR do not.
 
 No machine-wide execution policy or Windows security setting is changed. `-ExecutionPolicy Bypass` applies only to this installer process. Python installation requires the Windows **App Installer** (`winget`); if unavailable, install 64-bit Python 3.12 from <https://www.python.org/downloads/windows/> and rerun setup. Include the Python launcher in the Python installer. Standard app use needs no administrator access. If your Windows policy blocks creating `C:\SnipV1`, supply `-InstallDir "$env:LOCALAPPDATA\BeastSnipApp"`.
 
@@ -149,11 +160,11 @@ Use Undo, Redo and Delete in the contextual bar, zoom/Fit/1:1 below the image, a
 
 ### Privacy and redaction
 
-An editable session retains the original and undo states **in memory**. Redaction becomes a solid black block when copied, saved, pinned or sent to OCR. Exported images have no editable layers, source image text or embedded original. The editor redraws into a fresh image before encoding. Crop flattens the current view and can itself be undone while the app remains open.
+An editable session retains the original and undo states in memory and, when enabled, in private recovery files. Explicit editable projects also contain originals and recent undo/redo states. Redaction becomes a solid black block when copied, saved, pinned or sent to OCR. Exported images have no editable layers, source image text or embedded original. The editor redraws into a fresh image before encoding. Crop flattens the current view and can itself be undone while the app remains open.
 
 **Redaction does not erase earlier exports, clipboard contents, pinned images, screenshots held by other programs, file backups or OS memory/pagefile copies.** Delete or replace earlier copies yourself. Copying alone does not mark a session saved. Successful auto-save or an explicit save keeps its pixels; unsaved edits/text still trigger a discard warning. Exporting an image does not save its OCR text; use Save to History for that.
 
-Automatic history and automatic clipboard copy are both **off by default**. Version 2.0 saves new captures as PNGs in the Screenshots folder by default; it does not use temporary screenshot files. OCR sends PNG bytes directly to the local Tesseract process through stdin, so it needs no temporary screenshot file. Disable auto-save and do not enable automatic history if the initial unredacted capture must never be saved: that preference explicitly saves the initial capture before editing. Saving that item again replaces its pixels, thumbnail and OCR text.
+Automatic history and automatic clipboard copy are both **off by default**. BeastSnip saves new captures as PNGs in the Screenshots folder by default; it does not use temporary screenshot files. OCR sends PNG bytes directly to the local Tesseract process through stdin, so it needs no temporary screenshot file. Disable auto-save, automatic history, Quick Capture and editable recovery if the initial unredacted capture must never be saved. Auto-save explicitly saves the initial capture before editing; recovery/projects retain its editable source. Saving that item again replaces its pixels, thumbnail and OCR text.
 
 ## Local OCR
 
@@ -191,7 +202,10 @@ The tray menu has region, window and monitor capture, gallery, settings and **Qu
 
 | Item | Default location |
 | --- | --- |
-| App source and virtual environment | `C:\SnipV1` |
+| App source, runtime pointer, candidate runtimes and rollback backups | `C:\SnipV1` |
+| Private editable session recovery | `%LOCALAPPDATA%\BeastSnip\recovery` |
+| Screenshot favourites | `%LOCALAPPDATA%\BeastSnip\library.sqlite3` |
+| Verified updater downloads and status | `%LOCALAPPDATA%\BeastSnip\updates` |
 | Settings | `%LOCALAPPDATA%\BeastSnip\settings.json` |
 | Rotating local logs | `%LOCALAPPDATA%\BeastSnip\beastsnip.log` (1 MB × 3) |
 | History database | `%LOCALAPPDATA%\BeastSnip\history\history.sqlite3` |
@@ -216,8 +230,12 @@ Logical boundaries: `ui.py` (icons/action search), `autosave.py` (serial capture
 
 ```powershell
 Set-Location C:\SnipV1
-& .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-& .\.venv\Scripts\python.exe -m beastsnip --smoke-test
+. .\tools\Install-Transaction.ps1
+$beastPython = Get-BeastSnipPython -InstallDir (Get-Location).Path
+& $beastPython -m unittest discover -s tests -v
+& $beastPython -m beastsnip --smoke-test
+& .\tests\test_updater.ps1
+& .\tests\test_transactions.ps1
 ```
 
 Tesseract integration tests run only when `tesseract` is on PATH; other tests do not require OCR. `--smoke-test` starts the real UI, annotates, crops, undoes/redoes, checks rendered dimensions and exits. It does not register a hotkey, capture your desktop or prove Windows capture works. Use an isolated `BEASTSNIP_DATA_DIR` when testing. `tools/render_preview.py` renders the actual UI with generated sample images, real OCR and isolated temporary storage. `tools/make_icon.py` regenerates the ICO/PNG from the included original SVG; `tools/make_installer.py` regenerates the self-contained installer and source ZIP. See **VERIFICATION.md** for actual results and the outstanding Windows checklist.
@@ -245,4 +263,4 @@ QT_QPA_PLATFORM=offscreen BEASTSNIP_DATA_DIR=/tmp/beastsnip-check .venv/bin/pyth
 - **Locked or unwritable history:** choose a writable local history folder, ensure another program isn't locking the database, and check free disk space. Keep live SQLite history out of unreliable network-sync locations.
 - **App stays running when closed:** this is the configurable tray behaviour. Use tray → Quit BeastSnip.
 
-Screen recording, scrolling capture, AI tools and cloud sharing are outside version one.
+Scrolling capture uses visible pixels; it does not fetch pages or documents from their source. Screen recording, AI tools and cloud sharing are outside this release.

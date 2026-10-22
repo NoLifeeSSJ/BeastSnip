@@ -30,7 +30,7 @@ function Test-BeastSnipProcess {
     # an unrelated script's arguments. Do not stop arbitrary Python processes.
     $prefix = '^\s*(?:"[^"]+"|\S+)\s+(?:(?:-[uBEIsSO]+|-OO|-X\s+\S+|-W\s+\S+)\s+)*'
     if ($commandLine -match ($prefix + '(?:"' + $entry + '"|' + $entry + ')(?:\s|$)')) { return $true }
-    if ($executable.StartsWith(($root + '\.venv\'), [StringComparison]::OrdinalIgnoreCase)) {
+    if ($executable.StartsWith(($root + '\.venv\'), [StringComparison]::OrdinalIgnoreCase) -or $executable.StartsWith(($root + '\.beastsnip-runtimes\'), [StringComparison]::OrdinalIgnoreCase)) {
         return ($commandLine -match ($prefix + '(?:-m\s+beastsnip|"?run_beastsnip\.py"?)(?:\s|$)'))
     }
     return $false

@@ -8,7 +8,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'BeastSnip installation requires Windows 11.' }
-$expectedVersion = '2.0.1'
+$expectedVersion = '2.1.0'
 
 function Find-BeastPython {
     $candidates = [System.Collections.Generic.List[string]]::new()
@@ -46,101 +46,129 @@ if (-not $python) {
 }
 
 $source = $PSScriptRoot
-try { New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null } catch {
-    throw "Cannot create $InstallDir. Choose a folder you own with -InstallDir, for example `$env:LOCALAPPDATA\BeastSnipApp. $($_.Exception.Message)"
+. (Join-Path $source 'tools\Update-Helpers.ps1')
+. (Join-Path $source 'tools\Install-Transaction.ps1')
+New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+$destination = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $InstallDir).Path)
+$lockPath = Join-Path $destination '.beastsnip-update.lock'
+try { $updateLock = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) } catch {
+    throw 'Another BeastSnip update is running or this folder is not writable. Wait for it to finish, then retry.'
 }
-$destination = (Resolve-Path -LiteralPath $InstallDir).Path
-Write-Host '[1/7] Checking the running app...' -ForegroundColor Cyan
-. (Join-Path $PSScriptRoot 'tools\Update-Helpers.ps1')
-Close-BeastSnipForUpdate -InstallDir $destination -CloseRunningApp:$CloseRunningApp
-Write-Host '[2/7] Backing up and updating application files...' -ForegroundColor Cyan
-if (-not [string]::Equals($source.TrimEnd('\'), $destination.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
-    # Source-only allowlist: never copy an existing venv, user history, or Git data.
-    $files = @('beastsnip', 'tests', 'tools', 'run_beastsnip.py', 'requirements.txt', 'requirements-build.txt', 'Install.ps1', 'Update.ps1', 'Repair-OCR.ps1', 'Launch.ps1', 'Launch.cmd', 'Build.ps1', 'README.md', 'VERIFICATION.md', 'CHANGELOG.md')
-    $backupRoot = Join-Path $env:LOCALAPPDATA ('BeastSnip\setup-backups\' + [guid]::NewGuid().ToString('N'))
+$runtimeId = [guid]::NewGuid().ToString('N')
+$runtimeDir = Join-Path (Join-Path $destination '.beastsnip-runtimes') $runtimeId
+$candidate = Join-Path $destination ('.beastsnip-stage-' + [guid]::NewGuid().ToString('N'))
+$transaction = $null
+$committed = $false
+$closedPrevious = $false
+$previousExists = Test-Path -LiteralPath (Join-Path $destination 'run_beastsnip.py')
+$files = @('beastsnip','tests','tools','run_beastsnip.py','requirements.txt','requirements-build.txt','Install.ps1','Update.ps1','Repair-OCR.ps1','Launch.ps1','Launch.cmd','Build.ps1','README.md','VERIFICATION.md','CHANGELOG.md')
+try {
+    Write-BeastSnipUpdateStatus 'staging' '[1/8] Preparing a separate candidate. The current application and Python runtime are retained.' $expectedVersion
+    Repair-BeastSnipInterruptedActivation -InstallDir $destination
+    New-Item -ItemType Directory -Path $candidate -Force | Out-Null
     foreach ($file in $files) {
         $from = Join-Path $source $file
-        $to = Join-Path $destination $file
-        if (-not (Test-Path -LiteralPath $from)) { throw "Installer payload is missing $file." }
-        if (Test-Path -LiteralPath $to) {
-            New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
-            Copy-Item -LiteralPath $to -Destination (Join-Path $backupRoot $file) -Recurse -Force
-        }
-        Copy-Item -LiteralPath $from -Destination $destination -Recurse -Force
+        if (-not (Test-Path -LiteralPath $from)) { throw "The installer payload is missing $file." }
+        Copy-Item -LiteralPath $from -Destination $candidate -Recurse -Force
     }
-    if (Test-Path -LiteralPath $backupRoot) { Write-Host "Previous application files backed up to $backupRoot" }
-}
-Clear-BeastSnipBytecode -InstallDir $destination
-
-Push-Location -LiteralPath $destination
-try {
-    Write-Host '[3/7] Checking Python and installing dependencies...' -ForegroundColor Cyan
-    $venv = Join-Path $destination '.venv\Scripts\python.exe'
-    if (-not (Test-Path -LiteralPath $venv)) {
-        & $python -m venv (Join-Path $destination '.venv')
-        if ($LASTEXITCODE -ne 0) { throw 'Could not create the virtual environment.' }
-    }
-    & $venv -m pip install --disable-pip-version-check -r (Join-Path $destination 'requirements.txt')
-    if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed. Check your network connection and the pip error above, then rerun setup.' }
-    & $venv -m pip check
-    if ($LASTEXITCODE -ne 0) { throw 'Installed dependencies are inconsistent.' }
-    & $venv -c "from beastsnip.app import MainWindow; from beastsnip.windows import grab_pixels; print('BeastSnip imports OK')"
-    if ($LASTEXITCODE -ne 0) { throw 'Application import verification failed.' }
-    $installedVersion = & $venv -c "import beastsnip; print(beastsnip.__version__)"
-    if ($LASTEXITCODE -ne 0 -or ([string]$installedVersion).Trim() -ne $expectedVersion) {
-        throw "Application version verification failed. Expected $expectedVersion, got $installedVersion. The update has not completed."
-    }
-    Write-Host '[4/7] Running application startup and editing tests...' -ForegroundColor Cyan
-    $previousDataDir = $env:BEASTSNIP_DATA_DIR
-    $smokeDir = Join-Path ([System.IO.Path]::GetTempPath()) ('BeastSnip-check-' + [guid]::NewGuid().ToString('N'))
+    Clear-BeastSnipBytecode -InstallDir $candidate
+    Write-BeastSnipJson -Path (Join-Path $candidate 'runtime.json') -Value @{schema=1; runtime=$runtimeId; version=$expectedVersion}
+    Write-BeastSnipUpdateStatus 'staging' '[2/8] Preparing the new Python runtime and dependencies...' $expectedVersion
+    & $python -m venv $runtimeDir
+    if ($LASTEXITCODE -ne 0) { throw 'The candidate Python runtime could not be created.' }
+    $candidatePython = Join-Path $runtimeDir 'Scripts/python.exe'
+    & $candidatePython -m pip install --disable-pip-version-check -r (Join-Path $candidate 'requirements.txt')
+    if ($LASTEXITCODE -ne 0) { throw 'Candidate dependency installation failed. The previous application has not been replaced.' }
+    & $candidatePython -m pip check
+    if ($LASTEXITCODE -ne 0) { throw 'The candidate dependencies are inconsistent.' }
+    Push-Location -LiteralPath $candidate
     try {
-        $env:BEASTSNIP_DATA_DIR = $smokeDir
-        & $venv -m beastsnip --smoke-test
-        if ($LASTEXITCODE -ne 0) { throw 'Application startup verification failed. See the error above.' }
-        & $venv -m unittest discover -s tests -v
-        if ($LASTEXITCODE -ne 0) { throw 'Application self-tests failed. See the error above.' }
-        & (Join-Path $destination 'tests\test_updater.ps1')
-    } finally {
-        if ($null -eq $previousDataDir) { Remove-Item Env:BEASTSNIP_DATA_DIR -ErrorAction SilentlyContinue } else { $env:BEASTSNIP_DATA_DIR = $previousDataDir }
-        if (Test-Path -LiteralPath $smokeDir) { Remove-Item -LiteralPath $smokeDir -Recurse -Force }
-    }
-
-    if ($InstallOCR) {
-        Write-Host '[5/7] Installing, configuring and testing local OCR...' -ForegroundColor Cyan
-        & (Join-Path $destination 'Repair-OCR.ps1') -InstallDir $destination
-    } else {
-        Write-Host '[5/7] OCR installation was not requested.'
-    }
-
-    Write-Host '[6/7] Testing Windows monitor mapping and capture buffers...' -ForegroundColor Cyan
-    & $venv -m beastsnip.maintenance --check-native
-    if ($LASTEXITCODE -ne 0) { throw 'Native monitor/capture validation failed. See the display diagnosis above; the updater has not passed all checks.' }
-
-    Write-Host 'Preparing automatic PNG saving in C:\SnipsV1\Screenshots...' -ForegroundColor Cyan
-    & $venv -m beastsnip.maintenance --configure-autosave 'C:\SnipsV1\Screenshots'
-    if ($LASTEXITCODE -ne 0) { throw 'The Screenshots folder or auto-save configuration could not be prepared. See the folder error above.' }
-
-    Write-Host '[7/7] Updating the desktop shortcut...' -ForegroundColor Cyan
-    $desktop = [Environment]::GetFolderPath('DesktopDirectory')
-    if (-not $desktop) { throw 'Windows did not return a desktop folder for this user.' }
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcutPath = Join-Path $desktop 'BeastSnip.lnk'
-    if (Test-Path -LiteralPath $shortcutPath) {
-        $prior = $shell.CreateShortcut($shortcutPath)
-        if ($prior.TargetPath -ne (Join-Path $destination '.venv\Scripts\pythonw.exe')) {
-            $priorBackup = Join-Path $desktop ('BeastSnip-previous-' + [guid]::NewGuid().ToString('N') + '.lnk')
-            Copy-Item -LiteralPath $shortcutPath -Destination $priorBackup
+        Write-BeastSnipUpdateStatus 'checking' '[3/8] Testing candidate startup, editing, recovery, library and scrolling algorithms...' $expectedVersion
+        $previousDataDir = $env:BEASTSNIP_DATA_DIR
+        $smokeDir = Join-Path ([IO.Path]::GetTempPath()) ('BeastSnip-check-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $env:BEASTSNIP_DATA_DIR = $smokeDir
+            & $candidatePython -m beastsnip --smoke-test
+            if ($LASTEXITCODE -ne 0) { throw 'Candidate startup failed. No live application files were replaced.' }
+            & $candidatePython -m unittest discover -s tests -v
+            if ($LASTEXITCODE -ne 0) { throw 'Candidate self-tests failed. No live application files were replaced.' }
+            & (Join-Path $candidate 'tests/test_updater.ps1')
+            & (Join-Path $candidate 'tests/test_transactions.ps1')
+        } finally {
+            if ($null -eq $previousDataDir) { Remove-Item Env:BEASTSNIP_DATA_DIR -ErrorAction SilentlyContinue } else { $env:BEASTSNIP_DATA_DIR = $previousDataDir }
+            Remove-Item -LiteralPath $smokeDir -Recurse -Force -ErrorAction SilentlyContinue
         }
+        Write-BeastSnipUpdateStatus 'checking' '[4/8] Closing BeastSnip and recording rollback data...' $expectedVersion
+        Close-BeastSnipForUpdate -InstallDir $destination -CloseRunningApp:$CloseRunningApp
+        $closedPrevious = $previousExists
+        $desktop = [Environment]::GetFolderPath('DesktopDirectory')
+        if (-not $desktop) { throw 'Windows did not return a desktop folder.' }
+        $shortcutPath = Join-Path $desktop 'BeastSnip.lnk'
+        $transaction = New-BeastSnipTransaction -InstallDir $destination -Names ($files + @('runtime.json')) -Runtime $runtimeId -ShortcutPath $shortcutPath
+        Write-BeastSnipUpdateStatus 'checking' '[5/8] Verifying OCR, native capture and the Screenshots folder...' $expectedVersion
+        if ($InstallOCR) { & (Join-Path $candidate 'Repair-OCR.ps1') -InstallDir $candidate -PythonExecutable $candidatePython }
+        & $candidatePython -m beastsnip.maintenance --check-native
+        if ($LASTEXITCODE -ne 0) { throw 'Native monitor/capture validation failed.' }
+        & $candidatePython -m beastsnip.maintenance --configure-autosave 'C:\SnipsV1\Screenshots'
+        if ($LASTEXITCODE -ne 0) { throw 'The Screenshots folder or preferences could not be prepared.' }
+    } finally { Pop-Location }
+    Write-BeastSnipUpdateStatus 'activating' '[6/8] Activating the tested application and runtime...' $expectedVersion
+    Invoke-BeastSnipActivation -Transaction $transaction -Candidate $candidate
+    Clear-BeastSnipBytecode -InstallDir $destination
+    Push-Location -LiteralPath $destination
+    try {
+        $activePython = Get-BeastSnipPython -InstallDir $destination
+        $activeWindowed = Get-BeastSnipPython -InstallDir $destination -Windowed
+        $installed = & $activePython -c 'import beastsnip; print(beastsnip.__version__)'
+        if ($LASTEXITCODE -ne 0 -or ([string]$installed).Trim() -ne $expectedVersion) { throw 'Post-activation version verification failed.' }
+        $previousDataDir = $env:BEASTSNIP_DATA_DIR
+        $smokeDir = Join-Path ([IO.Path]::GetTempPath()) ('BeastSnip-active-check-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $env:BEASTSNIP_DATA_DIR = $smokeDir
+            & $activePython -m beastsnip --smoke-test
+            if ($LASTEXITCODE -ne 0) { throw 'Post-activation startup verification failed.' }
+        } finally {
+            if ($null -eq $previousDataDir) { Remove-Item Env:BEASTSNIP_DATA_DIR -ErrorAction SilentlyContinue } else { $env:BEASTSNIP_DATA_DIR = $previousDataDir }
+            Remove-Item -LiteralPath $smokeDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Write-BeastSnipUpdateStatus 'activating' '[7/8] Refreshing the desktop shortcut and icon...' $expectedVersion
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $activeWindowed
+        $shortcut.Arguments = '"' + (Join-Path $destination 'run_beastsnip.py') + '"'
+        $shortcut.WorkingDirectory = $destination
+        $shortcut.IconLocation = (Join-Path $destination 'beastsnip/resources/beastsnip.ico') + ',0'
+        $shortcut.Description = 'BeastSnip - screenshots, projects and offline OCR'
+        $shortcut.Save()
+    } finally { Pop-Location }
+    $transaction.State = 'complete'
+    Save-BeastSnipTransaction $transaction
+    $committed = $true
+    Write-BeastSnipUpdateStatus 'complete' "[8/8] UPDATE COMPLETE - BeastSnip $expectedVersion" $expectedVersion
+    Write-Host "Installed in $destination. Rollback backup: $($transaction.Backup)" -ForegroundColor Green
+    if ($Launch) {
+        try { & (Join-Path $destination 'Launch.ps1') } catch { Write-Warning ('The update is complete, but automatic launch failed. Use the desktop shortcut. ' + $_.Exception.Message) }
     }
-    $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = Join-Path $destination '.venv\Scripts\pythonw.exe'
-    $shortcut.Arguments = '"' + (Join-Path $destination 'run_beastsnip.py') + '"'
-    $shortcut.WorkingDirectory = $destination
-    $shortcut.IconLocation = (Join-Path $destination 'beastsnip\resources\beastsnip.ico') + ',0'
-    $shortcut.Description = 'BeastSnip - private screenshots and annotations'
-    $shortcut.Save()
-    Write-Host "`nUPDATE COMPLETE - BeastSnip $expectedVersion verified in $destination" -ForegroundColor Green
-    Write-Host "Desktop shortcut: $shortcutPath"
-    Write-Host "Launch: & '$destination\Launch.ps1'"
-    if ($Launch) { & (Join-Path $destination 'Launch.ps1') }
-} finally { Pop-Location }
+} catch {
+    $originalError = $_
+    $message = 'UPDATE FAILED: ' + $_.Exception.Message
+    if ($transaction -and -not $committed) {
+        try {
+            Restore-BeastSnipTransaction $transaction
+            $message += ' Previous application, runtime selection and settings restored.'
+            Write-BeastSnipUpdateStatus 'rolled-back' $message $expectedVersion
+        } catch {
+            $message += ' Automatic rollback could not finish: ' + $_.Exception.Message + '. Backup: ' + $transaction.Backup
+            Write-BeastSnipUpdateStatus 'failed' $message $expectedVersion
+        }
+    } else { Write-BeastSnipUpdateStatus 'failed' $message $expectedVersion }
+    if ($Launch -and $closedPrevious -and -not $committed -and (Test-Path -LiteralPath (Join-Path $destination 'Launch.ps1'))) {
+        try { & (Join-Path $destination 'Launch.ps1') } catch { Write-Warning 'The previous app could not be relaunched automatically. Use its desktop shortcut.' }
+    }
+    throw $originalError
+} finally {
+    if (-not $committed -and (-not $transaction -or $transaction.State -eq 'rolled-back') -and (Test-Path -LiteralPath $runtimeDir)) { Remove-Item -LiteralPath $runtimeDir -Recurse -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $candidate) { Remove-Item -LiteralPath $candidate -Recurse -Force -ErrorAction SilentlyContinue }
+    $updateLock.Dispose()
+    Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+}

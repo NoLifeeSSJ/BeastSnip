@@ -53,6 +53,51 @@ def cursor_position():
     return QPoint(point.x, point.y)
 
 
+def escape_pressed():
+    require_windows()
+    return bool(user32.GetAsyncKeyState(0x1B) & 0x8000)
+
+
+def window_at_point(point):
+    require_windows()
+    user32.WindowFromPoint.argtypes, user32.WindowFromPoint.restype = [W.POINT], W.HWND
+    user32.GetAncestor.argtypes, user32.GetAncestor.restype = [W.HWND, W.UINT], W.HWND
+    hwnd = user32.WindowFromPoint(W.POINT(point.x(), point.y()))
+    root = user32.GetAncestor(hwnd, 2) if hwnd else None
+    if not root:
+        raise RuntimeError('There is no visible window under the selected area.')
+    return root
+
+
+def scroll_at(point, notches=-3):
+    require_windows()
+    target = window_at_point(point)
+    pid = W.DWORD()
+    user32.GetWindowThreadProcessId(target, ctypes.byref(pid))
+    if pid.value == os.getpid():
+        raise RuntimeError('Select content in another application for scrolling capture.')
+    user32.SetForegroundWindow.argtypes = [W.HWND]
+    if user32.GetForegroundWindow() != target and not user32.SetForegroundWindow(target):
+        raise RuntimeError('Windows could not focus the target. Use manual scrolling mode instead.')
+    user32.SetPhysicalCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+    if not user32.SetPhysicalCursorPos(point.x(), point.y()):
+        raise OSError('Windows could not position the pointer for scrolling.')
+    class MouseInput(ctypes.Structure):
+        _fields_ = [('dx', W.LONG), ('dy', W.LONG), ('mouseData', W.DWORD), ('flags', W.DWORD), ('time', W.DWORD), ('extra', ctypes.c_size_t)]
+    class KeyboardInput(ctypes.Structure):
+        _fields_ = [('vk', W.WORD), ('scan', W.WORD), ('flags', W.DWORD), ('time', W.DWORD), ('extra', ctypes.c_size_t)]
+    class HardwareInput(ctypes.Structure):
+        _fields_ = [('message', W.DWORD), ('low', W.WORD), ('high', W.WORD)]
+    class InputData(ctypes.Union):
+        _fields_ = [('mouse', MouseInput), ('keyboard', KeyboardInput), ('hardware', HardwareInput)]
+    class Input(ctypes.Structure):
+        _fields_ = [('type', W.DWORD), ('data', InputData)]
+    value = Input(0, InputData(mouse=MouseInput(0, 0, (120 * notches) & 0xFFFFFFFF, 0x0800, 0, 0)))
+    user32.SendInput.argtypes, user32.SendInput.restype = [W.UINT, ctypes.POINTER(Input), ctypes.c_int], W.UINT
+    if user32.SendInput(1, ctypes.byref(value), ctypes.sizeof(value)) != 1:
+        raise OSError('Windows blocked automatic scrolling. Use manual scrolling mode instead.')
+
+
 def monitor_rectangles():
     require_windows()
     class MONITORINFOEX(ctypes.Structure):

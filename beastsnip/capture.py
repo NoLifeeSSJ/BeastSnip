@@ -37,7 +37,30 @@ class RegionOverlay(QWidget):
             p.setPen(QPen(QColor("#bba1ff"), 2))
             p.drawRect(r)
         p.setPen(QColor("#ffffff"))
-        p.drawText(20, 32, "Drag to select  •  Esc to cancel" if selection is None else f"{selection.width()} × {selection.height()} px  •  Esc to cancel")
+        p.drawText(20, 32, "Drag to select  •  M magnifier  •  Esc to cancel" if selection is None else f"{selection.width()} × {selection.height()} px  •  M magnifier  •  Esc to cancel")
+        cursor = getattr(self.session, 'cursor_point', None)
+        if cursor is not None and getattr(self.session, 'magnifier', False) and self.physical.contains(cursor):
+            self.paint_magnifier(p, cursor)
+
+    def paint_magnifier(self, painter, cursor):
+        x = (cursor.x() - self.physical.x()) * self.width() / self.physical.width()
+        y = (cursor.y() - self.physical.y()) * self.height() / self.physical.height()
+        left = min(max(8, round(x + 26)), max(8, self.width() - 162))
+        top = round(y + 26)
+        if top + 182 > self.height():
+            top = max(8, round(y - 194))
+        source = QRect(cursor.x() - self.physical.x() - 10, cursor.y() - self.physical.y() - 10, 21, 21)
+        target = QRect(left + 4, top + 4, 146, 146)
+        painter.fillRect(QRect(left, top, 154, 180), QColor('#1b1b2b'))
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        painter.drawImage(target, self.local_image.copy(source))
+        painter.setPen(QPen(QColor('#c6a4ff'), 1))
+        painter.drawRect(target)
+        center = target.center()
+        painter.drawLine(center.x() - 9, center.y(), center.x() + 9, center.y())
+        painter.drawLine(center.x(), center.y() - 9, center.x(), center.y() + 9)
+        painter.setPen(QColor('#ffffff'))
+        painter.drawText(left + 7, top + 169, f'{cursor.x()}, {cursor.y()} px')
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -52,13 +75,17 @@ class RegionOverlay(QWidget):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.session.cancel()
+        elif event.key() == Qt.Key.Key_M:
+            self.session.magnifier = not self.session.magnifier
+            for overlay in self.session.overlays:
+                overlay.update()
 
 
 class RegionSession(QObject):
     captured = Signal(object)
     cancelled = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, magnifier=True):
         super().__init__(parent)
         monitors = windows.monitor_rectangles()
         mapped = windows.map_displays(QApplication.screens(), monitors)
@@ -67,6 +94,7 @@ class RegionSession(QObject):
             self.bounds = self.bounds.united(physical)
         self.frozen = windows.grab_pixels(self.bounds)
         self.start_point, self.end_point = None, None
+        self.cursor_point, self.magnifier, self.selected_rect = None, magnifier, None
         self.overlays, self.done = [], False
         for display in mapped:
             self.overlays.append(RegionOverlay(self, display.screen, display.physical))
@@ -96,8 +124,9 @@ class RegionSession(QObject):
         if windows.user32.GetAsyncKeyState(0x1B) & 0x8000:
             self.cancel()
             return
+        self.cursor_point = windows.cursor_position()
         if self.start_point is not None:
-            self.end_point = windows.cursor_position()
+            self.end_point = QPoint(self.cursor_point)
             if not windows.user32.GetAsyncKeyState(0x01) & 0x8000:
                 self.finish()
                 return
@@ -120,6 +149,7 @@ class RegionSession(QObject):
             self.cancel()
             return
         image = self.frozen.copy(rect.translated(-self.bounds.topLeft()))
+        self.selected_rect = QRect(rect)
         self.cleanup()
         self.captured.emit(image)
 

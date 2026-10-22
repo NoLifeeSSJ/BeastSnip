@@ -1,9 +1,10 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param([string]$InstallDir = $PSScriptRoot)
+param([string]$InstallDir = $PSScriptRoot, [string]$PythonExecutable = '')
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Run the OCR repair on Windows.' }
-$python = Join-Path $InstallDir '.venv\Scripts\python.exe'
+. (Join-Path $PSScriptRoot 'tools/Install-Transaction.ps1')
+$python = if ($PythonExecutable) { $PythonExecutable } else { Get-BeastSnipPython -InstallDir $InstallDir }
 if (-not (Test-Path -LiteralPath $python)) { throw 'The BeastSnip virtual environment is missing. Run the full Update-BeastSnip.ps1 updater.' }
 
 function Invoke-TesseractInstall {
@@ -58,7 +59,7 @@ try {
         Invoke-OfflineOCRCheck
     }
     if ($script:OcrRepairExit -ne 0) {
-        throw "OCR repair failed (exit $script:OcrRepairExit). See the specific message above. The app update is retained; rerun Repair-OCR.ps1 after resolving the reported runtime, language-download or permissions problem."
+        throw "OCR repair failed (exit $script:OcrRepairExit). See the specific message above. The staged updater will restore the previous application and settings. Resolve the reported OCR problem, then rerun the updater."
     }
     Write-Host 'Offline OCR verified and configured. Your other settings and history were preserved.' -ForegroundColor Green
 } finally { Pop-Location }

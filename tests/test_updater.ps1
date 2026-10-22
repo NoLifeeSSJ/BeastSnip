@@ -29,7 +29,10 @@ $cases = @(
     @((New-TestProcess 12 'python.exe' 'C:\Python312\python.exe' 'python.exe C:\SnipV1\run_beastsnip.py.bak'), $false),
     @((New-TestProcess 13 'BeastSnip.exe' 'C:\Other\BeastSnip.exe' ''), $false),
     @((New-TestProcess 14 'python.exe' '' ''), $false),
-    @((New-TestProcess 15 'other.exe' 'C:\SnipV1\other.exe' 'other.exe C:\SnipV1\run_beastsnip.py'), $false)
+    @((New-TestProcess 15 'other.exe' 'C:\SnipV1\other.exe' 'other.exe C:\SnipV1\run_beastsnip.py'), $false),
+    @((New-TestProcess 17 'python.exe' 'C:\SnipV1\.beastsnip-runtimes\0123456789abcdef0123456789abcdef\Scripts\python.exe' 'python.exe -m beastsnip'), $true),
+    @((New-TestProcess 18 'pythonw.exe' 'C:\Other\.beastsnip-runtimes\0123456789abcdef0123456789abcdef\Scripts\pythonw.exe' 'pythonw.exe -m beastsnip'), $false),
+    @((New-TestProcess 19 'python.exe' 'C:\SnipV1\.beastsnip-runtimes\0123456789abcdef0123456789abcdef\Scripts\python.exe' 'python.exe -m other_module'), $false)
 )
 foreach ($case in $cases) {
     Assert-UpdateTest ((Test-BeastSnipProcess -Process $case[0] -InstallDir $root) -eq $case[1]) ('Wrong process classification: ' + $case[0].ProcessId)
