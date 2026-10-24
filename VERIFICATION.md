@@ -1,20 +1,27 @@
-# BeastSnip 2.1.1 verification
+# BeastSnip 2.1.2 verification
 
-22 October 2026. Linux development host, Python 3.12.14, PySide6 6.10.2, Tesseract 5.5.0 and official PowerShell 7.5.4. Native Windows taskbar/Shell appearance, input, capture and PowerShell 5.1 execution still require the Windows checks below.
+24 October 2026. Linux development host, Python 3.12.14, PySide6 6.10.2, Tesseract 5.5.0 and official PowerShell 7.5.4. Native Windows taskbar/Shell appearance, input, capture and PowerShell 5.1 execution still require the Windows checks below.
+
+## Multi-monitor installation repair
+
+- Reproduced both reported 2.1.1 failures before the fix by running the drag-selection and cancellation tests with a simulated additional `LEN G25-10` at `(2560, 0, 1920, 1080)`, scale 1. Both raised the exact reported mapping error.
+- The cause was inconsistent test data: a synthetic single-monitor Windows inventory was paired with the installer's actual Qt screen inventory. The fixture now supplies both inventories together while retaining a real QScreen for the actual overlay widget. An unused virtual-desktop mock was removed.
+- All four capture-coordinate tests pass with the same simulated additional screen. A permanent regression keeps this extra screen outside the synthetic session. Another exercises both region overlays and the full frozen-pixel bounds for the reported secondary-screen layout with reversed native enumeration.
+- Production monitor matching was not weakened. Existing duplicate-name, mixed-DPI, negative-origin and ambiguous-match rejection tests remain enabled. No self-tests are skipped to permit installation; the separate native Windows monitor/capture validation still runs before activation.
 
 ## Application and UI
 
-- **100 Python tests passed**, with no failures or skips in the development environment. These use actual Qt widgets, mouse/keyboard events, background workers, generated pixels, PNG/project files, SQLite and local OCR. Native Windows calls are substituted where necessary.
+- **102 Python tests passed from the extracted delivery payload**, with no failures or skips in the development environment. These use actual Qt widgets, mouse/keyboard events, background workers, generated pixels, PNG/project files, SQLite and local OCR. Native Windows calls are substituted where necessary.
 - All previous capture geometry, annotation, opaque redaction, crop/undo, clipboard/export, history, OCR, readable OCR sidebar, autosave/retry, migration, Quick Capture, recovery, library, scrolling and Update Centre coverage remains enabled.
 - New tools draw actual editable Brush, Line and Rounded Box annotations. Shift constraints, separate tool defaults, persisted preferences and new shortcuts are exercised.
 - Real flattened pixels distinguish dashed from solid lines, soft shape fills from solid fills, smoothing from angular freehand, and 50% opacity from opaque output. A redaction with drawing opacity set to 5% remains black at every interior pixel.
 - The real colour palette and style popover change a selected annotation without losing selection. Changes are undoable and update the same auto-saved PNG.
 - An eraser drag removes several annotations in one undo step. A test allows an intermediate PNG write before the next deletion and verifies the final PNG still contains the latest state. Original image pixels remain intact; undo/redo restores/removes annotations.
 - Styled projects preserve all new properties, rendered pixels and undo/redo. A fixture created by the actual published 2.1.0 encoder verifies format-1 loading with legacy opacity/smoothing. New saves use format 2; old apps reject it instead of silently losing styles.
-- Version History contains all eight releases, newest first, with separate dates and sections. Search, current-version selection, All Releases, Copy Notes and no-results behaviour are exercised with real widgets. The bundled JSON is generated from CHANGELOG.md.
+- Version History contains all nine releases, newest first, with separate dates and sections. Search, current-version selection, All Releases, Copy Notes and no-results behaviour are exercised with real widgets. The selected current release includes the monitor-installation repair. The bundled JSON is generated from CHANGELOG.md.
 - The corrected gear is rendered and its pixel bounds checked for horizontal/vertical centring. The width field is checked against font metrics and usable text width, including the complete `px` unit.
-- 26 drawing/workspace/OCR UI tests passed with Qt's Windows style at 150% scale. The eight new drawing/history tests also passed at 200%. The style panel stays within the available screen height and scrolls as needed; 900 × 600 header/footer/context actions remain inside the window.
-- Actual 2.1.1 drawing, colour, style, laptop and version-history previews are rendered using generated sample pixels and isolated storage. No private desktop screenshot is used.
+- The 2.1.1 baseline included 26 drawing/workspace/OCR UI tests with Qt's Windows style at 150% scale and the eight drawing/history tests at 200%. The style panel stays within the available screen height and scrolls as needed; 900 × 600 header/footer/context actions remain inside the window. This repair changes no drawing or layout code.
+- Existing 2.1.1 drawing, colour, style, laptop and version-history previews use generated sample pixels and isolated storage. No private desktop screenshot is used; those historical previews are retained unchanged.
 - Startup smoke tests construct the real UI, exercise editing/crop/undo and load the application/window icon. On Windows, smoke startup fails if assigning BeastSnip's explicit application ID fails.
 
 ## Taskbar and update checks
@@ -37,9 +44,9 @@ Projects and private recovery retain original pixels beneath redactions; flatten
 
 ## Native Windows checks still required
 
-1. Run the single 2.1.1 updater in Windows PowerShell 5.1. Verify candidate tests, actual icon loading/application ID, native capture/OCR, new runtime pointer, post-activation checks, shortcut and title version. Test spaces/apostrophes and redirected/OneDrive desktops.
+1. Run the single 2.1.2 updater in Windows PowerShell 5.1 on the multi-monitor rig that rejected 2.1.1. Verify the complete candidate suite, actual icon loading/application ID, native capture/OCR on all monitors, new runtime pointer, post-activation checks, shortcut and title version. Test spaces/apostrophes and redirected/OneDrive desktops.
 2. Quit and restart through the refreshed BeastSnip shortcut. Verify the running taskbar logo/group, application name, pin/relaunch and dialog icons. Replace an old pinned Python shortcut if it persists. Confirm unrelated Python apps retain their identity. Check the actual IPropertyStore write/readback on Windows.
-3. Browse all eight versions offline; search, resize and copy notes. Open history from the app menu, Update Centre and action search.
+3. Browse all nine versions offline; search, resize and copy notes. Open history from the app menu, Update Centre and action search.
 4. Draw with all original and new tools. Check palette, hex/custom colour, size units, preview, opacity, dash/dot/caps, smoothing, shape fills and arrowheads. Verify selected edits, Shift constraints, preferences after restart, erase/undo, PNG autosave and project/recovery round trips.
 5. Verify readability and popup placement at real 100%, 125%, 150% and 200% display scaling, including short windows and multiple monitors. Confirm colour/style popovers disappear before capture.
 6. Retest region/window/monitor captures, mixed DPI, negative origins, hotkeys, delays, tray/single-instance behaviour, OCR/sidebar/expanded reader, clipboard/export, pins and screenshot-library actions. Cloud geometry tests do not replace native capture checks.

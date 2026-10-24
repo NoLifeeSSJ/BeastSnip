@@ -2,7 +2,11 @@
 
 A local Windows 11 screenshot application written in Python 3.12 and PySide6. Dark interface, purple accents, editable annotations, opaque redaction, private history, offline OCR and pinned screenshots. No account, paid API, browser wrapper or remote image processing.
 
-[Update v2.1.1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.1.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
+[Update v2.1.2](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.2.ps1) · [First-time setup](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Setup-BeastSnip.ps1) · [Complete source ZIP](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/BeastSnip-source.zip) · [SHA256 checksums](https://github.com/NoLifeeSSJ/BeastSnip/blob/main/delivery/SHA256SUMS.txt)
+
+## BeastSnip 2.1.2: multi-monitor installation repair
+
+Fixed two capture self-tests that combined one fake Windows display with every real Qt display on the computer. On a multi-monitor rig this could reject a connected screen such as `LEN G25-10` and stop the 2.1.1 installer. Both inventories are now isolated consistently, with regression tests for the reported second-screen layout. The actual Windows capture checks still run; no tests are bypassed. Run the single updater below even if 2.1.1 never finished installing. All drawing, history, OCR, recovery and screenshot features are retained.
 
 ![BeastSnip 2.1.1 drawing workspace](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1.1-drawing.png)
 
@@ -55,19 +59,21 @@ The initial capture is written **before editing**. Edits replace its current PNG
 
 ![BeastSnip 2.1 screenshot library](https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/main/delivery/BeastSnip-2.1-library.png)
 
-## Update an existing installation (2.1.1)
+## Update an existing installation (2.1.2)
 
-Save any open capture first. Download [Update-BeastSnip-2.1.1.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/heads/main/delivery/Update-BeastSnip-2.1.1.ps1) to Downloads, then run:
+Save any open capture first. Paste this into PowerShell to download and run the single, self-contained updater:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-BeastSnip-2.1.1.ps1" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
+$beastUpdate = Join-Path $env:TEMP 'Update-BeastSnip-2.1.2.ps1'
+Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/NoLifeeSSJ/BeastSnip/v2.1.2/delivery/Update-BeastSnip-2.1.2.ps1' -OutFile $beastUpdate
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$beastUpdate" -InstallDir "C:\SnipV1" -CloseRunningApp -Launch
 ```
 
-This single self-contained script updates the application to version 2.1.1, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
+You can also [download Update-BeastSnip-2.1.2.ps1](https://github.com/NoLifeeSSJ/BeastSnip/raw/refs/tags/v2.1.2/delivery/Update-BeastSnip-2.1.2.ps1) and run it with the same arguments. This script updates the application to version 2.1.2, backs up replaced application files, refreshes dependencies and the icon/desktop shortcut, installs or repairs Tesseract, prepares missing OCR languages and saves verified OCR paths. Your saved capture history, export folder, language selection, hotkey and other preferences are retained.
 
 **`-CloseRunningApp` explicitly closes BeastSnip in the target installation, including when it is hidden in the tray. Unsaved in-memory captures/edits will be discarded, so save them first.** Other Python programs and other BeastSnip installations are not targeted. The updater rechecks process identity before stopping it. Without this switch it stops immediately with instructions if BeastSnip is running; it no longer waits silently for two minutes. You can instead use tray → Quit BeastSnip and omit the close switch.
 
-The script displays **eight stages** and prints **`UPDATE COMPLETE - BeastSnip 2.1.1`** only after the required checks pass. It prepares source and dependencies separately, runs the UI smoke check and tests, then closes the target installation and snapshots rollback data. OCR repair, native capture and folder checks run before application activation. Post-activation version/startup checks and shortcut refresh must also succeed. Generated package bytecode is cleared to prevent stale imports.
+The script displays **eight stages** and prints **`UPDATE COMPLETE - BeastSnip 2.1.2`** only after the required checks pass. It prepares source and dependencies separately, runs the UI smoke check and tests, then closes the target installation and snapshots rollback data. OCR repair, native capture and folder checks run before application activation. Post-activation version/startup checks and shortcut refresh must also succeed. Generated package bytecode is cleared to prevent stale imports.
 
 Each new Python environment is created at its permanent location under `C:\SnipV1\.beastsnip-runtimes`; it is never moved afterward. `runtime.json` selects the active environment. Existing `.venv` installations remain a supported fallback and are retained. If activation or final checks fail, the previous source, runtime pointer, settings and desktop shortcut are restored automatically; an optional relaunch opens the previous version. Failures before activation leave the live application files in place. Incomplete activation journals are repaired on the next updater run. Backups and old runtimes are retained under `.beastsnip-backups` and `.beastsnip-runtimes`; do not delete the active runtime.
 

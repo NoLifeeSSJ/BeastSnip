@@ -78,6 +78,24 @@ class DisplayMappingTests(unittest.TestCase):
             self.assertEqual(overlay.call_args.args[2], native[0][1])
             session.cancel()
 
+    def test_reported_secondary_monitor_maps_with_a_reversed_native_inventory(self):
+        primary = screen("Primary panel", QRect(0, 0, 2560, 1440))
+        secondary = screen("LEN G25-10", QRect(2560, 0, 1920, 1080))
+        native = [(r"\\.\DISPLAY2", QRect(2560, 0, 1920, 1080)),
+                  (r"\\.\DISPLAY1", QRect(0, 0, 2560, 1440))]
+        with patch.object(windows, "monitor_rectangles", return_value=native), \
+             patch.object(windows, "grab_pixels", return_value=white_image(4480, 1440)) as grab, \
+             patch("beastsnip.capture.QApplication.screens", return_value=[primary, secondary]), \
+             patch("beastsnip.capture.RegionOverlay") as overlay:
+            session = RegionSession()
+            try:
+                grab.assert_called_once_with(QRect(0, 0, 4480, 1440))
+                self.assertEqual(session.bounds, QRect(0, 0, 4480, 1440))
+                self.assertEqual([call.args[1] for call in overlay.call_args_list], [primary, secondary])
+                self.assertEqual([call.args[2] for call in overlay.call_args_list], [native[1][1], native[0][1]])
+            finally:
+                session.cancel()
+
 
 if __name__ == "__main__":
     unittest.main()

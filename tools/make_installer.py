@@ -23,7 +23,7 @@ for directory in ("beastsnip", "tests", "tools"):
 stream = io.BytesIO()
 with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
     for filename in sorted(FILES):
-        info = zipfile.ZipInfo(filename, (2026, 10, 22, 0, 0, 0))
+        info = zipfile.ZipInfo(filename, (2026, 10, 24, 0, 0, 0))
         info.compress_type = zipfile.ZIP_DEFLATED
         info.external_attr = 0o644 << 16
         archive.writestr(info, (ROOT / filename).read_bytes())

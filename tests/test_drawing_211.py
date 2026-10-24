@@ -170,9 +170,10 @@ class Drawing211Tests(unittest.TestCase):
 
     def test_version_history_covers_all_releases_searches_and_copies_selected_notes(self):
         history = load_history()
-        self.assertEqual([r['version'] for r in history], ['2.1.1', '2.1.0', '2.0.1', '2.0.0', '1.0.3', '1.0.2', '1.0.1', '1.0.0'])
+        self.assertEqual([r['version'] for r in history], ['2.1.2', '2.1.1', '2.1.0', '2.0.1', '2.0.0', '1.0.3', '1.0.2', '1.0.1', '1.0.0'])
         dialog = ReleaseHistory(self.window); self.addCleanup(dialog.close); dialog.show()
-        self.assertIn('2.1.1', dialog.reader.toPlainText())
+        self.assertIn('2.1.2', dialog.reader.toPlainText())
+        self.assertIn('LEN G25-10', dialog.reader.toPlainText())
         dialog.search.setText('396'); self.assertEqual(len(dialog.matches), 1)
         self.assertEqual(dialog.matches[0]['version'], '2.0.1')
         dialog.copy_notes(); self.assertIn('396', APP.clipboard().text())

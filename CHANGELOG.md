@@ -2,6 +2,19 @@
 
 Every published version is listed separately, newest first. This file is also the source for the offline **Version History** screen in the app. Images and OCR remain local.
 
+## 2.1.2 — 24 October 2026
+
+### Fixed
+
+- Fixed two installer capture self-tests that mixed a synthetic Windows monitor list with the computer's real Qt screens. Installations with multiple displays could fail with “Cannot uniquely map display”, including a LEN G25-10 at 2560,0, before any application files were replaced.
+- Isolated both display inventories in the capture fixture. Drag-selection and cancellation checks now use the same synthetic desktop regardless of the connected monitors.
+- Added regression coverage for an additional connected display and for the reported secondary-monitor geometry with reversed native enumeration. Real display mapping still rejects ambiguous matches.
+
+### Installation
+
+- Shipped a single 2.1.2 PowerShell repair/updater that can finish an installation stopped by 2.1.1. Required self-tests, actual Windows monitor/capture checks, OCR repair, rollback, settings, screenshot storage and shortcut/icon refresh remain enabled.
+- Retained every 2.1.1 drawing tool, style, editable-project feature and previous release note; the offline Version History now includes this repair separately.
+
 ## 2.1.1 — 22 October 2026
 
 ### Added

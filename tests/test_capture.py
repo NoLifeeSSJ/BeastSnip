@@ -23,8 +23,27 @@ class CoordinateTests(unittest.TestCase):
 
     def make_session(self):
         bounds = QRect(-100, -50, 400, 300)
-        with patch("beastsnip.windows.virtual_rect", return_value=bounds), patch("beastsnip.windows.grab_pixels", return_value=white_image(400, 300)), patch("beastsnip.windows.monitor_rectangles", return_value=[(APP.primaryScreen().name(), bounds)]):
+        primary = APP.primaryScreen()
+        # Both display inventories must describe the same synthetic desktop.
+        # Keep a real QScreen for RegionOverlay's native window, but never let
+        # additional monitors on the installer's machine enter this fixture.
+        with patch("beastsnip.capture.QApplication.screens", return_value=[primary]), \
+             patch("beastsnip.windows.grab_pixels", return_value=white_image(400, 300)), \
+             patch("beastsnip.windows.monitor_rectangles", return_value=[(primary.name(), bounds)]):
             return RegionSession()
+
+    def test_synthetic_session_ignores_unrelated_connected_displays(self):
+        secondary = SimpleNamespace(name=lambda: "LEN G25-10",
+                                    geometry=lambda: QRect(2560, 0, 1920, 1080),
+                                    devicePixelRatio=lambda: 1)
+        with patch("beastsnip.capture.QApplication.screens", return_value=[APP.primaryScreen(), secondary]):
+            session = self.make_session()
+        try:
+            self.assertEqual(session.bounds, QRect(-100, -50, 400, 300))
+            self.assertEqual(len(session.overlays), 1)
+            self.assertEqual(session.frozen.size(), session.bounds.size())
+        finally:
+            session.cancel()
 
     def test_reverse_drag_returns_expected_frozen_pixels(self):
         session = self.make_session()

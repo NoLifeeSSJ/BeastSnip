@@ -8,7 +8,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'BeastSnip installation requires Windows 11.' }
-$expectedVersion = '2.1.1'
+$expectedVersion = '2.1.2'
 
 function Find-BeastPython {
     $candidates = [System.Collections.Generic.List[string]]::new()
